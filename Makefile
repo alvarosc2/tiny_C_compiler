@@ -9,8 +9,10 @@ OBJ_MAIN := $(patsubst src/main/%.c,$(BUILD)/main/%.o,$(SRC_MAIN))
 # main.o se excluye de los tests porque define main()
 OBJ_LIB  := $(filter-out $(BUILD)/main/main.o,$(OBJ_MAIN))
 TEST_BIN := $(BUILD)/run_tests
+RT_DIR   := $(BUILD)/runtime
+RT_OBJ   := $(RT_DIR)/start.o $(RT_DIR)/lib.o
 
-.PHONY: all build test run lex ast types selfcheck sanitize memcheck format clean help
+.PHONY: all build test run lex ast types asm exe selfcheck runtime sanitize memcheck format clean help
 
 all: build
 
@@ -23,7 +25,7 @@ $(BUILD)/main/%.o: src/main/%.c | $(BUILD)/main
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 # Un solo binario Criterion con todos los test_*.c
-$(TEST_BIN): $(SRC_TEST) $(OBJ_LIB) | $(BUILD)
+$(TEST_BIN): $(SRC_TEST) $(OBJ_LIB) | $(BUILD) $(TARGET) $(RT_OBJ)
 	$(CC) $(CFLAGS) $^ -o $@ -lcriterion
 
 $(BUILD) $(BUILD)/main:
@@ -47,8 +49,31 @@ ast: build
 types: build
 	./$(TARGET) --types $(or $(FILE),examples/sample.c)
 
+# Runtime propio sin libc: start.asm (NASM) + lib.c (compilado con tcc)
+runtime: $(RT_OBJ)
+
+$(RT_DIR):
+	mkdir -p $@
+
+$(RT_DIR)/start.o: src/runtime/start.asm | $(RT_DIR)
+	nasm -f elf64 $< -o $@
+
+$(RT_DIR)/lib.o: src/runtime/lib.c src/runtime/rt.h $(TARGET) | $(RT_DIR)
+	cpp -P -nostdinc -I src/runtime $< > $(RT_DIR)/lib.i
+	./$(TARGET) --asm $(RT_DIR)/lib.i > $(RT_DIR)/lib.s
+	nasm -f elf64 $(RT_DIR)/lib.s -o $@
+
+# Ensamblador NASM que genera tcc: make asm FILE=examples/hello.c
+asm: build
+	cpp -P -nostdinc -I src/runtime $(or $(FILE),examples/hello.c) > $(BUILD)/asm.i
+	./$(TARGET) --asm $(BUILD)/asm.i
+
+# Ejecutable: make exe FILE=examples/hello.c OUT=build/hello  (luego ./build/hello)
+exe: build runtime
+	scripts/cc.sh $(or $(FILE),examples/hello.c) $(or $(OUT),$(BUILD)/a.out)
+
 # El compilador verifica su propio codigo (preprocesado con cpp -P)
-SELF_SRC := lexer ast symtab sema parser
+SELF_SRC := lexer ast symtab sema codegen parser
 selfcheck: build
 	@for f in $(SELF_SRC); do \
 		cpp -P -nostdinc -I src/main src/main/$$f.c > build/$$f.i && \
@@ -77,6 +102,8 @@ help:
 	@echo "run       analiza un archivo: make run FILE=archivo.c"
 	@echo "lex       muestra los tokens (default examples/sample.c)"
 	@echo "ast       muestra el AST (default examples/sample.c)"
+	@echo "asm       muestra el ensamblador NASM generado"
+	@echo "exe       compila a ejecutable: make exe FILE=x.c OUT=build/x"
 	@echo "types     muestra el AST con tipos"
 	@echo "selfcheck verifica el propio codigo fuente del compilador"
 	@echo "sanitize  tests con ASan/UBSan"

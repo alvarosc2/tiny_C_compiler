@@ -16,4 +16,11 @@ char *error_log();
 void error_log_reset();
 void error_quiet(int quiet);
 
+/* Búfer de salida de texto (para el generador de código) */
+void emit_reset();
+void emit(char *s);
+void emit_char(int c);
+void emit_int(int n);
+char *emit_text();
+
 #endif

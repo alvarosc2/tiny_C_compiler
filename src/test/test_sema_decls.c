@@ -96,3 +96,9 @@ Test(sema_decl, recursion_and_annotations) {
     cr_assert_eq(node_decl(node_a(add)), fn);
     cr_assert_eq(node_decl(node_b(add)), decl);
 }
+
+Test(sema_decl, more_than_six_parameters) {
+    e1("void f(int a, int b, int c, int d, int e, int g, int h) { }",
+       "<entrada>:1:1: error: la funcion 'f' no puede tener mas de 6 parametros\n");
+    cr_assert_eq(check("void f(int a, int b, int c, int d, int e, int g) { }"), 0);
+}

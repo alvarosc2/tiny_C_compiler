@@ -78,13 +78,28 @@ char *read_string() {
     advance(); // skip "
     int start = pos;
     while (next_char() != '"' && next_char() != 0) {
-        advance();
+        if (advance() == '\\' && next_char() != 0) advance();
     }
     lex_ok = next_char() == '"';
     int len = pos - start;
     char *p = alloc(len + 1);
-    copy_mem(p, src + start, len);
-    p[len] = 0;
+    int i = 0;
+    int j = 0;
+    while (i < len) {
+        int c = src[start + i];
+        i = i + 1;
+        // Escapes: \n \t \r \\ \" ; cualquier otro \x produce x
+        if (c == '\\' && i < len) {
+            c = src[start + i];
+            i = i + 1;
+            if (c == 'n') c = '\n';
+            if (c == 't') c = '\t';
+            if (c == 'r') c = '\r';
+        }
+        p[j] = c;
+        j = j + 1;
+    }
+    p[j] = 0;
     advance(); // skip closing "
     return p;
 }

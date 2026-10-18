@@ -84,7 +84,7 @@ arguments      ::= expression ("," expression)* ;
 ```Text
 identifier      ::= [a-zA-Z_][a-zA-Z0-9_]* ;
 number          ::= [0-9]+ ;
-string_literal  ::= "\"" .*? "\"" ;
+string_literal  ::= "\"" (escape | [^"\\])* "\"" ;   /* escapes: \n \t \r \\ \" ; otro \x produce x */
 char_literal    ::= "'" ( [^'\\] | "\\" [nrt0'\\] ) "'" ;
 ```
 
@@ -224,6 +224,7 @@ tcc archivo.c            análisis sintáctico y semántico; reporta errores (c�
 tcc --tokens archivo.c   volcado de tokens        (make lex)
 tcc --ast archivo.c      volcado del AST con sangría y línea:columna   (make ast)
 tcc --types archivo.c    análisis semántico y AST con tipos            (make types)
+tcc --asm archivo.c      ensamblador NASM (sección 11)                 (make asm)
 ```
 
 ### 9.6 Fuera de alcance
@@ -280,3 +281,52 @@ Aritmética sobre `void*`, `puntero + puntero` y `* / %` con punteros son errore
 ### 10.5 Verificación del propio compilador
 
 `make selfcheck` preprocesa con `cpp -P` los fuentes del compilador (`lexer`, `ast`, `symtab`, `sema`, `parser`) y los pasa por `tcc`, comprobando que el código cumple el subconjunto y supera su propio análisis semántico.
+
+## 11. Generación de código
+
+### 11.1 Salida y herramientas
+
+`generate(program)` (`codegen.c`) recibe un AST sin errores y devuelve ensamblador **NASM, sintaxis Intel, x86-64 Linux**, pensado para leerse. `tcc --asm` lo escribe en la salida estándar.
+
+```Text
+fuente.c -> cpp -P -> tcc --asm -> nasm -f elf64 -> ld -> ejecutable
+                                                    ^
+                                   build/runtime/start.o + lib.o
+```
+
+- No se usa libc ni el enlazador dinámico: se enlaza con `ld` directamente y el punto de entrada es `_start` (`src/runtime/start.asm`).
+- `scripts/cc.sh entrada.c salida` ejecuta toda la cadena y deja `salida.i`, `salida.s` y `salida.o` para inspeccionarlos (`make exe FILE=... OUT=...`).
+- Todos los símbolos de C se emiten con prefijo `_` (`main` es `_main`) para no chocar con registros ni mnemónicos de NASM. Las etiquetas internas son `L<n>` (control de flujo) y `S<n>` (cadenas), que no pueden coincidir con símbolos de C.
+
+### 11.2 Runtime propio (`src/runtime/`)
+
+Sin dependencia de la libc: lo mínimo que necesita el compilador para ejecutarse a sí mismo.
+
+| Archivo | Contenido |
+|---------|-----------|
+| `start.asm` | `_start` (llama a `main(argc, argv)` y sale con su resultado) y las llamadas al sistema `sys_exit`, `sys_write`, `sys_read`, `sys_open`, `sys_close`, `sys_map` |
+| `lib.c` | Compilado con el propio `tcc`: `alloc` (bloques de 1 MiB con `mmap`, memoria en ceros, nunca se libera), `copy_mem`, `str_len`, `str_eq`, `str_cat`, `print_char`, `print_str`, `print_int` |
+| `rt.h` | Prototipos de todo lo anterior (`#include "rt.h"`) |
+
+No se prioriza la eficiencia ni la elegancia: `str_eq` y `str_len` son bucles simples y `alloc` no libera.
+
+### 11.3 Convenciones
+
+- **ABI**: System V AMD64. Argumentos en `rdi, rsi, rdx, rcx, r8, r9`; retorno en `rax`. **Máximo 6 parámetros por función** (error semántico `la funcion 'f' no puede tener mas de 6 parametros`), así que nunca se pasan argumentos por la pila.
+- **Pila alineada a 16 bytes** en cada `call`: el generador cuenta los `push` pendientes y, si son impares, reserva 8 bytes alrededor de la llamada.
+- **Tamaños**: `char` 1 byte (con signo), `int` 4, puntero 8.
+- **Valores**: toda expresión deja su resultado en `rax`, normalizado: `int` y `char` con el signo extendido a 64 bits (`movsxd`, `movsx`). Los `int` envuelven a 32 bits.
+- **Máquina de pila**: una operación binaria evalúa el operando izquierdo, hace `push rax`, evalúa el derecho, y deja `rax` = izquierdo y `rcx` = derecho. No se optimiza.
+- **Aritmética de punteros**: el desplazamiento se multiplica por el tamaño del tipo apuntado; `p - q` divide entre ese tamaño. Los punteros se comparan sin signo.
+- **Locales y parámetros**: una ranura de 8 bytes cada uno en `[rbp-N]`, sin reutilizar entre bloques, accedida con el ancho de su tipo. El desplazamiento se guarda en `N_DECL.value`/`N_PARAM.value` como `-N`; en un global `value` es 1.
+- **Globales**: sección `.data` (`dd`, `db` o `dq`), con la constante de su inicializador, o 0. Las cadenas van en `.rodata`; `N_STR.value` guarda el número `S<n>`.
+- **Función sin `return` final**: devuelve 0 (como `main` en C).
+- **Control de flujo**: `if`/`while` con saltos a etiquetas; `&&` y `||` con cortocircuito.
+
+### 11.4 Cadenas
+
+El lexer decodifica los escapes `\n`, `\t`, `\r`, `\\` y `\"`; cualquier otro `\x` produce `x`. No existe `\0` en cadenas (terminaría la cadena). El generador las emite como `db "texto", 10, 0`.
+
+### 11.5 Fuera de alcance por ahora
+
+Más de 6 parámetros, optimización de registros, enteros de 64 bits, `&` (dirección de), arreglos y compatibilidad general con C. El objetivo es un compilador que se compile a sí mismo.

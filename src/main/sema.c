@@ -483,6 +483,10 @@ void s_function(void *f) {
         if (body != 0) sym_set_defined(sym, 1);
     }
 
+    if (s_list_len(node_a(f)) > 6) {
+        s_report(f, s_q("la funcion ", name, " no puede tener mas de 6 parametros"));
+    }
+
     // Parámetros y cuerpo comparten ámbito
     st_push();
     void *p = node_a(f);

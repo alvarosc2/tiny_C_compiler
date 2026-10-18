@@ -57,3 +57,42 @@ void error_log_reset() {
 void error_quiet(int quiet) {
     quiet_mode = quiet;
 }
+
+static char *emit_buf;
+static size_t emit_len, emit_cap;
+
+static void emit_room(size_t extra) {
+    if (emit_len + extra + 1 <= emit_cap) return;
+    while (emit_len + extra + 1 > emit_cap) emit_cap = emit_cap ? emit_cap * 2 : 4096;
+    emit_buf = realloc(emit_buf, emit_cap);
+}
+
+void emit_reset() {
+    emit_len = 0;
+    emit_room(0);
+    emit_buf[0] = 0;
+}
+
+void emit(char *s) {
+    size_t n = strlen(s);
+    emit_room(n);
+    memcpy(emit_buf + emit_len, s, n + 1);
+    emit_len += n;
+}
+
+void emit_char(int c) {
+    emit_room(1);
+    emit_buf[emit_len++] = (char)c;
+    emit_buf[emit_len] = 0;
+}
+
+void emit_int(int n) {
+    char tmp[16];
+    snprintf(tmp, sizeof(tmp), "%d", n);
+    emit(tmp);
+}
+
+char *emit_text() {
+    emit_room(0);
+    return emit_buf;
+}

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ast_dump.h"
+#include "codegen.h"
 #include "parser.h"
 #include "runtime.h"
 #include "sema.h"
@@ -43,9 +44,9 @@ int main(int argc, char **argv) {
     }
     int mode_ok = strcmp(mode, "--check") == 0 || strcmp(mode, "--tokens") == 0 ||
                   strcmp(mode, "--ast") == 0 ||
-                  strcmp(mode, "--types") == 0;
+                  strcmp(mode, "--types") == 0 || strcmp(mode, "--asm") == 0;
     if (!path || !mode_ok) {
-        fprintf(stderr, "uso: %s [--tokens | --ast | --types] archivo.c\n", argv[0]);
+        fprintf(stderr, "uso: %s [--tokens | --ast | --types | --asm] archivo.c\n", argv[0]);
         return 2;
     }
 
@@ -62,6 +63,7 @@ int main(int argc, char **argv) {
         else if (strcmp(mode, "--ast") == 0) ast_dump(stdout, program);
         else {
             if (analyze(program) > 0) status = 1;
+            else if (strcmp(mode, "--asm") == 0) fputs(generate(program), stdout);
             else if (strcmp(mode, "--types") == 0) {
                 ast_show_types(1);
                 ast_dump(stdout, program);
