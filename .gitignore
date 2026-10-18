@@ -1,0 +1,32 @@
+# Salida de compilación
+build/
+
+# Binarios y objetos
+*.o
+*.obj
+*.a
+*.so
+*.out
+*.exe
+*.d
+
+# Compiladores de cada etapa de bootstrap
+tcc
+tcc1
+tcc2
+
+# Depuración y análisis
+core
+core.*
+*.gcda
+*.gcno
+*.gcov
+vgcore.*
+callgrind.out.*
+
+# Editor / SO
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
