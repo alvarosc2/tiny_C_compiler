@@ -12,7 +12,7 @@ TEST_BIN := $(BUILD)/run_tests
 RT_DIR   := $(BUILD)/runtime
 RT_OBJ   := $(RT_DIR)/start.o $(RT_DIR)/lib.o
 
-.PHONY: all build test run lex ast types asm exe selfcheck runtime sanitize memcheck format clean help
+.PHONY: all build test run lex ast types asm exe selfhost selfcheck runtime sanitize memcheck format clean help
 
 all: build
 
@@ -58,8 +58,8 @@ $(RT_DIR):
 $(RT_DIR)/start.o: src/runtime/start.asm | $(RT_DIR)
 	nasm -f elf64 $< -o $@
 
-$(RT_DIR)/lib.o: src/runtime/lib.c src/runtime/rt.h $(TARGET) | $(RT_DIR)
-	cpp -P -nostdinc -I src/runtime $< > $(RT_DIR)/lib.i
+$(RT_DIR)/lib.o: src/runtime/lib.c src/runtime/rt.h src/main/runtime.h $(TARGET) | $(RT_DIR)
+	cpp -P -nostdinc -I src/runtime -I src/main $< > $(RT_DIR)/lib.i
 	./$(TARGET) --asm $(RT_DIR)/lib.i > $(RT_DIR)/lib.s
 	nasm -f elf64 $(RT_DIR)/lib.s -o $@
 
@@ -71,6 +71,16 @@ asm: build
 # Ejecutable: make exe FILE=examples/hello.c OUT=build/hello  (luego ./build/hello)
 exe: build runtime
 	scripts/cc.sh $(or $(FILE),examples/hello.c) $(or $(OUT),$(BUILD)/a.out)
+
+# Auto-alojamiento: tcc0 (gcc) -> tcc1 (sin libc) -> tcc2; el codigo generado
+# por tcc1 y tcc2 debe ser identico (punto fijo)
+selfhost: build runtime
+	scripts/selfhost.sh $(TARGET) $(BUILD)/stage1
+	scripts/selfhost.sh $(BUILD)/stage1/tcc $(BUILD)/stage2
+	@for f in $(BUILD)/stage1/*.s; do \
+		cmp $$f $(BUILD)/stage2/$$(basename $$f) || exit 1; \
+	done
+	@echo "auto-alojamiento OK: stage1 y stage2 generan el mismo codigo"
 
 # El compilador verifica su propio codigo (preprocesado con cpp -P)
 SELF_SRC := lexer ast symtab sema codegen parser
@@ -104,6 +114,7 @@ help:
 	@echo "ast       muestra el AST (default examples/sample.c)"
 	@echo "asm       muestra el ensamblador NASM generado"
 	@echo "exe       compila a ejecutable: make exe FILE=x.c OUT=build/x"
+	@echo "selfhost  tcc se compila a si mismo (stage1, stage2) y compara"
 	@echo "types     muestra el AST con tipos"
 	@echo "selfcheck verifica el propio codigo fuente del compilador"
 	@echo "sanitize  tests con ASan/UBSan"

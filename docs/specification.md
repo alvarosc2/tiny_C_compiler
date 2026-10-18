@@ -330,3 +330,43 @@ El lexer decodifica los escapes `\n`, `\t`, `\r`, `\\` y `\"`; cualquier otro `\
 ### 11.5 Fuera de alcance por ahora
 
 Más de 6 parámetros, optimización de registros, enteros de 64 bits, `&` (dirección de), arreglos y compatibilidad general con C. El objetivo es un compilador que se compile a sí mismo.
+
+## 12. Auto-alojamiento
+
+### 12.1 Etapas
+
+```Text
+tcc0  gcc + libc   (src/main/*.c, runtime.c, main.c)   herramienta de arranque y depuración
+tcc1  tcc0 compila los fuentes subconjunto + runtime propio   -> ejecutable estático, sin libc
+tcc2  tcc1 compila los mismos fuentes                          -> debe ser idéntico a tcc1
+```
+
+`make selfhost` ejecuta `scripts/selfhost.sh` dos veces y compara con `cmp` el ensamblador de cada módulo en `build/stage1` y `build/stage2`: si coincide, el compilador alcanzó el punto fijo. `test_selfhost.c` lo comprueba en `make test`.
+
+### 12.2 Qué se compila
+
+| Módulo | Contenido |
+|--------|-----------|
+| `lexer`, `ast`, `symtab`, `sema`, `codegen`, `parser` | El compilador (`src/main`), sin libc |
+| `src/self/tcc_main.c` | `main` mínimo: `tcc [--check \| --asm] archivo.c` |
+| `src/runtime/lib.c` | Runtime propio: memoria, cadenas, archivos, errores, búfer de salida |
+| `src/runtime/start.asm` | `_start` y llamadas al sistema |
+
+Cada módulo se preprocesa con `cpp -P -nostdinc -I src/main -I src/runtime`, se traduce a `.s`, se ensambla con `nasm` y todo se enlaza con `ld`.
+
+### 12.3 Sustitutos de la biblioteca estándar
+
+| Libc (tcc0) | Propio (`lib.c`) |
+|-------------|------------------|
+| `calloc` | `alloc` (`mmap`, memoria en ceros) |
+| `memcpy` | `copy_mem` |
+| `strcmp` / `strlen` / concatenación | `str_eq` / `str_len` / `str_cat` |
+| `snprintf("%d")` | `int_to_str` |
+| `fopen`/`fread` | `read_file` (`sys_open`, `sys_read`, `sys_close`) |
+| `fputs(stderr)`/`fwrite` | `write_all` sobre `sys_write` |
+| mensajes de error | `report_error`, `error_log`, `error_quiet`, `set_source_name` |
+| `realloc` del búfer de salida | `emit*` con crecimiento por duplicación |
+
+### 12.4 Diferencias entre tcc0 y tcc1
+
+tcc1 solo ofrece `--check` y `--asm`. `--tokens`, `--ast` y `--types` (`token_dump.c`, `ast_dump.c`, `main.c`) existen solo en tcc0 porque usan libc y estructuras fuera del subconjunto. Ambas etapas generan exactamente el mismo ensamblador.

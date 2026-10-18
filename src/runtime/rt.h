@@ -17,6 +17,10 @@ int str_len(char *s);
 int str_eq(char *a, char *b);
 char *str_cat(char *a, char *b);
 
+int write_all(int fd, char *buf, int n);
+char *read_file(char *path);
+char *int_to_str(int n);
+
 void print_char(int c);
 void print_str(char *s);
 void print_int(int n);
