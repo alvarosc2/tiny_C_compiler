@@ -33,6 +33,20 @@ static int is_single_char_operator(int kind) {
     return kind < 256 && kind != 0 && strchr("+-*/%=!<>(){}[],;", kind) != NULL;
 }
 
+const char *token_spelling(int kind) {
+    static char single[2];
+    const char *s = keyword_spelling(kind);
+    if (s) return s;
+    s = two_char_spelling(kind);
+    if (s) return s;
+    if (is_single_char_operator(kind)) {
+        single[0] = (char)kind;
+        single[1] = 0;
+        return single;
+    }
+    return NULL;
+}
+
 const char *token_category(int kind) {
     if (kind == T_EOF) return "Fin";
     if (kind == T_ID) return "Identificador";

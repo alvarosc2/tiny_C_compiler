@@ -12,7 +12,7 @@ program     ::= (function | declaration)* ;
 
 ```Text
 function    ::= type identifier "(" parameters? ")" block ;
-parameters  ::= parameter ("," parameter)* ;
+parameters  ::= "void" | parameter ("," parameter)* ;
 parameter   ::= type identifier ;
 ```
 
@@ -26,9 +26,10 @@ declarator  ::= identifier ;
 ## 4. Tipos soportados (mínimos)
 
 ```Text
-type        ::= "int" | "char" | "void" | pointer_type ;
-pointer_type ::= type "*" ;
+type        ::= ("int" | "char" | "void") "*"* ;
 ```
+
+Los punteros se expresan con `"*"*` en lugar de la regla recursiva por la izquierda `pointer_type ::= type "*"`, que un parser descendente no puede implementar directamente.
 
 Con esto ya puedes implementar punteros, que son esenciales para manejar memoria, strings y estructuras internas del compilador.
 
@@ -101,8 +102,6 @@ El compilador no implementa preprocesador. Antes de compilar, `make selfhost` ej
 declaration ::= type declarator ("=" expression)? ";"
               | type identifier "(" parameters? ")" ";" ;     /* prototipo */
 
-type        ::= "int" | "char" | "void" | pointer_type ;       /* sin cambios */
-
 unary       ::= ("+" | "-" | "!" | "*") unary
               | "(" type ")" unary                              /* cast */
               | postfix ;
@@ -141,3 +140,89 @@ primary     ::= identifier | number | string_literal | char_literal
 2. **Stage 1**: `build/tcc` compila `src/main/` → `build/tcc1`.
 3. **Stage 2**: `build/tcc1` compila `src/main/` → `build/tcc2`.
 4. Criterio de éxito: `tcc1` y `tcc2` producen salida idéntica y pasan los mismos tests.
+
+## 9. Especificación del parser
+
+El parser consume el flujo de tokens del lexer (`next_token()`), valida que siga la gramática de las secciones 1‑8 y construye un árbol de sintaxis abstracta (AST). No comprueba tipos ni declaraciones: eso corresponde al análisis semántico.
+
+### 9.1 Método
+
+Descenso recursivo con un token de anticipación (`peek`). Hay una función por regla de la gramática.
+
+- **Función o declaración:** ambas empiezan con `type identifier`. Tras leerlos, `(` indica función o prototipo; `=` o `;` indica declaración.
+- **Cast o paréntesis:** tras `(`, si el siguiente token es `int`, `char` o `void` es un cast; si no, es una expresión entre paréntesis.
+- **Llamada:** un `identifier` seguido de `(`.
+- **Niveles binarios** (`||` hasta `*`): un bucle `while` por nivel, con asociatividad izquierda.
+- **Asignación:** recursiva, con asociatividad derecha. El lado izquierdo debe ser un l‑value: `N_ID`, `N_INDEX` o `N_UNOP` con `*`. Si no, es un error.
+- **Posfijos** (`[ ]`, `++`, `--`): bucle después de `primary`.
+
+### 9.2 Nodos del AST
+
+Todos los nodos miden 64 bytes y usan offsets fijos (LP64), igual que los tokens:
+
+```Text
+kind@0  line@4  col@8  value@12  a@16  b@24  c@32  next@40  text@48  type@56
+```
+
+| Nodo | Campos |
+|------|--------|
+| `N_PROGRAM` | `a` = primera función o declaración |
+| `N_FUNC` | `text` = nombre, `type` = retorno, `a` = parámetros, `b` = bloque (nulo en un prototipo) |
+| `N_PARAM`, `N_DECL` | `text` = nombre, `type`, `a` = inicializador (puede ser nulo) |
+| `N_BLOCK` | `a` = primera sentencia |
+| `N_IF` | `a` = condición, `b` = then, `c` = else (puede ser nulo) |
+| `N_WHILE` | `a` = condición, `b` = cuerpo |
+| `N_RETURN` | `a` = expresión (puede ser nula) |
+| `N_EXPR_STMT` | `a` = expresión |
+| `N_BINOP` | `value` = token del operador, `a` = izquierda, `b` = derecha |
+| `N_UNOP` | `value` = token del operador, `a` = operando |
+| `N_CAST` | `type` = tipo destino, `a` = operando |
+| `N_INDEX` | `a` = base, `b` = índice |
+| `N_POSTFIX` | `value` = `T_INC` o `T_DEC`, `a` = operando |
+| `N_CALL` | `text` = nombre, `a` = primer argumento |
+| `N_ID`, `N_STR` | `text` |
+| `N_NUM`, `N_CHR` | `value` |
+
+Las listas (sentencias, parámetros, argumentos y elementos del programa) se enlazan con `next`. `line` y `col` se copian del token que origina el nodo.
+
+### 9.3 Representación de tipos
+
+`type` es un entero: el tipo base (`T_INT`, `T_CHAR` o `T_VOID`) más el nivel de punteros multiplicado por 1000. Por ejemplo, `char *` es `T_CHAR + 1000`.
+
+### 9.4 Errores
+
+El parser reporta **varios errores** en una sola pasada, con recuperación en modo pánico:
+
+- Formato: `archivo:línea:columna: error: mensaje`, por ejemplo `se esperaba ')' y se encontro ';'`. Los mensajes van sin acentos, igual que los del lexer.
+- Un token `T_ERROR` del lexer se reporta con su propio mensaje y no genera un segundo error.
+- Tras un error, el parser descarta tokens hasta un punto de sincronización:
+  - dentro de un bloque: después de `;`, o antes de `}`;
+  - a nivel de programa: antes de la siguiente palabra clave de tipo.
+- No se reportan errores derivados mientras se sincroniza: tras un error, se suprimen los siguientes hasta consumir al menos un token.
+- El número de errores se acumula. Si es mayor que cero, `parse` devuelve el árbol pero el compilador termina con código de salida 1 sin generar código.
+- Límite de 20 errores; después se detiene con el mensaje `demasiados errores`.
+
+### 9.5 Interfaz
+
+```Text
+void *parse(char *source);     /* devuelve N_PROGRAM, nunca nulo */
+int   parse_error_count();     /* errores acumulados */
+```
+
+- Los nodos se manipulan con `node_new`, `node_kind`, `node_a`, `node_b`, `node_c`, `node_next`, `node_text`, `node_value`, `node_type`, `node_line`, `node_col` y los `node_set_*` correspondientes (`ast.h`).
+- Los errores se emiten con `report_error(línea, col, mensaje)` (`runtime.h`), que escribe en stderr y los acumula en `error_log()`. `set_source_name` fija el nombre de archivo mostrado.
+- Todas las funciones internas del parser llevan el prefijo `p_` para no chocar con símbolos de libc.
+- Los `T_ERROR` del lexer se reportan al leerlos y nunca llegan a las reglas del parser.
+- Las funciones de análisis devuelven nulo al fallar; bloques y programa siempre devuelven un nodo.
+
+Uso desde la línea de comandos:
+
+```Text
+tcc archivo.c            analiza y reporta errores (código de salida 1 si hay)
+tcc --tokens archivo.c   volcado de tokens        (make lex)
+tcc --ast archivo.c      volcado del AST con sangría y línea:columna   (make ast)
+```
+
+### 9.6 Fuera de alcance
+
+`for`, `do`, `switch`, `break`, `continue`, `struct`, `enum` y arreglos declarados quedan excluidos. Al terminar el parser se revisará qué extensiones de la sección 8.2 pueden eliminarse para simplificar la gramática.

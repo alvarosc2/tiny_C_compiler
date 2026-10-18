@@ -1,5 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include "ast_dump.h"
+#include "parser.h"
+#include "runtime.h"
 #include "token_dump.h"
 
 static char *read_file(const char *path) {
@@ -23,16 +27,38 @@ static char *read_file(const char *path) {
     return buf;
 }
 
+static int has_flag(const char *s) {
+    return s[0] == '-' && s[1] == '-';
+}
+
 int main(int argc, char **argv) {
-    if (argc != 2) {
-        fprintf(stderr, "uso: %s archivo.c\n", argv[0]);
+    const char *mode = "--check";
+    const char *path = NULL;
+
+    for (int i = 1; i < argc; i++) {
+        if (has_flag(argv[i])) mode = argv[i];
+        else if (!path) path = argv[i];
+        else path = NULL, i = argc;
+    }
+    int mode_ok = strcmp(mode, "--check") == 0 || strcmp(mode, "--tokens") == 0 ||
+                  strcmp(mode, "--ast") == 0;
+    if (!path || !mode_ok) {
+        fprintf(stderr, "uso: %s [--tokens | --ast] archivo.c\n", argv[0]);
         return 2;
     }
 
-    char *source = read_file(argv[1]);
+    char *source = read_file(path);
     if (!source) return 1;
 
-    tokens_dump(stdout, source);
+    int status = 0;
+    if (strcmp(mode, "--tokens") == 0) {
+        tokens_dump(stdout, source);
+    } else {
+        set_source_name((char *)path);
+        void *program = parse(source);
+        if (parse_error_count() > 0) status = 1;
+        else if (strcmp(mode, "--ast") == 0) ast_dump(stdout, program);
+    }
     free(source);
-    return 0;
+    return status;
 }

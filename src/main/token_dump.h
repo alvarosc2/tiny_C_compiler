@@ -8,6 +8,9 @@
 /* Categoría legible: "Identificador", "PalabraClave", "Numero", ... */
 const char *token_category(int kind);
 
+/* Texto de una palabra clave u operador ("while", "<=", "+"); NULL si no aplica */
+const char *token_spelling(int kind);
+
 /* Escribe una línea: L:C: <Categoria> texto */
 void token_print(FILE *out, void *token);
 
