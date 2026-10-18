@@ -61,6 +61,12 @@ Test(token_dump, multiline) {
         "3:12: <Fin>\n");
 }
 
+Test(token_dump, error_token) {
+    char buf[256] = {0};
+    dump_to_buffer("\"abc", buf, sizeof(buf));
+    cr_assert_str_eq(buf, "1:1: <Error> cadena sin cerrar\n1:5: <Fin>\n");
+}
+
 Test(token_dump, categories) {
     cr_assert_str_eq(token_category(T_WHILE), "PalabraClave");
     cr_assert_str_eq(token_category(T_AND), "Operador");

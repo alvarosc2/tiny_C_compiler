@@ -25,6 +25,7 @@
 #define T_INC    273
 #define T_DEC    274
 #define T_CHRLIT 275
+#define T_ERROR  276
 
 /* Layout del token (LP64): kind@0, line@4, text@8, value@16, col@20 */
 #define TOKEN_SIZE       24

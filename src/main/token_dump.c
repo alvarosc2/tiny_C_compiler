@@ -39,6 +39,7 @@ const char *token_category(int kind) {
     if (kind == T_NUM) return "Numero";
     if (kind == T_STR) return "Cadena";
     if (kind == T_CHRLIT) return "Caracter";
+    if (kind == T_ERROR) return "Error";
     if (keyword_spelling(kind)) return "PalabraClave";
     if (two_char_spelling(kind) || is_single_char_operator(kind)) return "Operador";
     return "Desconocido";
@@ -48,7 +49,7 @@ void token_print(FILE *out, void *token) {
     int kind = token_kind(token);
     fprintf(out, "%d:%d: <%s>", token_line(token), token_col(token), token_category(kind));
 
-    if (kind == T_ID) {
+    if (kind == T_ID || kind == T_ERROR) {
         fprintf(out, " %s", token_text(token));
     } else if (kind == T_STR) {
         fprintf(out, " \"%s\"", token_text(token));

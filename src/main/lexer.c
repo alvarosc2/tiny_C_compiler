@@ -7,6 +7,7 @@ int line;       // línea actual (desde 1)
 int col;        // columna actual (desde 1)
 int tok_line;   // línea donde empieza el token en curso
 int tok_col;    // columna donde empieza el token en curso
+int lex_ok;     // 0 si el último literal es inválido (sin cerrar o fuera de rango)
 
 int is_alpha(int c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
@@ -30,7 +31,9 @@ int next_char() {
 }
 
 int advance() {
-    int c = src[pos++];
+    int c = src[pos];
+    if (c == 0) return 0; // nunca avanzar más allá del fin
+    pos = pos + 1;
     if (c == '\n') {
         line = line + 1;
         col = 1;
@@ -61,8 +64,12 @@ char *read_identifier() {
 
 int read_number() {
     int n = 0;
+    lex_ok = 1;
     while (is_digit(next_char())) {
-        n = n * 10 + (advance() - '0');
+        int d = advance() - '0';
+        // n * 10 + d > 2147483647, sin desbordar al comprobarlo
+        if (n > (2147483647 - d) / 10) lex_ok = 0;
+        else n = n * 10 + d;
     }
     return n;
 }
@@ -73,6 +80,7 @@ char *read_string() {
     while (next_char() != '"' && next_char() != 0) {
         advance();
     }
+    lex_ok = next_char() == '"';
     int len = pos - start;
     char *p = alloc(len + 1);
     copy_mem(p, src + start, len);
@@ -84,6 +92,10 @@ char *read_string() {
 int read_char_literal() {
     advance(); // skip '
     int v = advance();
+    if (v == 0) {
+        lex_ok = 0;
+        return 0;
+    }
     if (v == '\\') {
         int e = advance();
         v = e;
@@ -92,7 +104,8 @@ int read_char_literal() {
         if (e == 't') v = '\t';
         if (e == '0') v = 0;
     }
-    if (next_char() == '\'') advance(); // skip closing '
+    lex_ok = next_char() == '\'';
+    if (lex_ok) advance(); // skip closing '
     return v;
 }
 
@@ -140,18 +153,21 @@ void *next_token() {
     // Número
     if (is_digit(c)) {
         int n = read_number();
+        if (!lex_ok) return make_token(T_ERROR, "numero demasiado grande", 0);
         return make_token(T_NUM, 0, n);
     }
 
     // String
     if (c == '"') {
         char *s = read_string();
+        if (!lex_ok) return make_token(T_ERROR, "cadena sin cerrar", 0);
         return make_token(T_STR, s, 0);
     }
 
     // Literal de carácter
     if (c == '\'') {
         int v = read_char_literal();
+        if (!lex_ok) return make_token(T_ERROR, "caracter sin cerrar", 0);
         return make_token(T_CHRLIT, 0, v);
     }
 
