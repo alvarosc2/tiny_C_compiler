@@ -158,17 +158,19 @@ Descenso recursivo con un token de anticipación (`peek`). Hay una función por 
 
 ### 9.2 Nodos del AST
 
-Todos los nodos miden 64 bytes y usan offsets fijos (LP64), igual que los tokens:
+Todos los nodos miden 72 bytes y usan offsets fijos (LP64), igual que los tokens:
 
 ```Text
-kind@0  line@4  col@8  value@12  a@16  b@24  c@32  next@40  text@48  type@56
+kind@0  line@4  col@8  value@12  a@16  b@24  c@32  next@40  text@48  type@56  decl@64
 ```
+
+`decl` lo rellena el análisis semántico (sección 10); no es un hijo y los recorridos lo ignoran.
 
 | Nodo | Campos |
 |------|--------|
 | `N_PROGRAM` | `a` = primera función o declaración |
 | `N_FUNC` | `text` = nombre, `type` = retorno, `a` = parámetros, `b` = bloque (nulo en un prototipo) |
-| `N_PARAM`, `N_DECL` | `text` = nombre, `type`, `a` = inicializador (puede ser nulo) |
+| `N_PARAM`, `N_DECL` | `text` = nombre, `type`, `a` = inicializador (puede ser nulo). En `N_DECL`, `value` = 1 si es global (tras sema) |
 | `N_BLOCK` | `a` = primera sentencia |
 | `N_IF` | `a` = condición, `b` = then, `c` = else (puede ser nulo) |
 | `N_WHILE` | `a` = condición, `b` = cuerpo |
@@ -218,11 +220,63 @@ int   parse_error_count();     /* errores acumulados */
 Uso desde la línea de comandos:
 
 ```Text
-tcc archivo.c            analiza y reporta errores (código de salida 1 si hay)
+tcc archivo.c            análisis sintáctico y semántico; reporta errores (código de salida 1 si hay)
 tcc --tokens archivo.c   volcado de tokens        (make lex)
 tcc --ast archivo.c      volcado del AST con sangría y línea:columna   (make ast)
+tcc --types archivo.c    análisis semántico y AST con tipos            (make types)
 ```
 
 ### 9.6 Fuera de alcance
 
 `for`, `do`, `switch`, `break`, `continue`, `struct`, `enum` y arreglos declarados quedan excluidos. Al terminar el parser se revisará qué extensiones de la sección 8.2 pueden eliminarse para simplificar la gramática.
+
+## 10. Análisis semántico
+
+### 10.1 Interfaz
+
+```Text
+int   analyze(void *program);  /* devuelve el número de errores */
+char *type_name(int t);        /* "int", "char*", "<error>" */
+```
+
+`analyze` recorre el AST tras un `parse` sin errores. Escribe en cada expresión su tipo (`node_type`; `N_CAST` conserva el tipo destino), guarda en `decl` de cada `N_ID` y `N_CALL` la declaración resuelta, y marca `N_DECL.value` = 1 si es global. `TY_ERR` (-1) es el tipo de una expresión errónea y silencia errores derivados. Si hay errores de sintaxis, el compilador no ejecuta el análisis semántico. Misma política de errores que el parser (varios errores, límite de 20, sin acentos). El código vive en `symtab.c` (tabla de símbolos con ámbitos) y `sema.c` (prefijo `s_`), dentro del subconjunto de la sección 8.
+
+### 10.2 Ámbitos
+
+- Los globales viven en el ámbito 0. Parámetros y cuerpo de una función comparten ámbito; cada bloque anidado y cada cuerpo de `if`/`while` abre uno nuevo.
+- Todo se declara antes de usarse; las funciones externas necesitan prototipo.
+- Redeclarar un nombre en el mismo ámbito es error; ocultar uno de un ámbito exterior es válido.
+- El inicializador de una variable local se analiza **antes** de declararla (`int a = a;` usa el `a` exterior). Es una desviación respecto a C.
+- Una variable o parámetro de tipo `void` es error.
+
+### 10.3 Tipos
+
+| Expresión | Tipo |
+|-----------|------|
+| `N_NUM`, `N_CHR` | `int` |
+| `N_STR` | `char*` |
+| `int`/`char` entre sí con `+ - * / %`, `-` y `+` unarios | `int` |
+| `puntero ± int`, `int + puntero` | el del puntero |
+| `puntero - puntero` (mismo tipo) | `int` |
+| `< > <= >= == != && \|\| !` | `int` |
+| `*p` | tipo apuntado (`p` no puede ser `void*`) |
+| `p[i]` | tipo apuntado; `i` entero |
+| `x++`, `x--` | tipo de `x`; `x` debe ser id, índice o `*` |
+| llamada | tipo de retorno |
+| asignación | tipo del lado izquierdo |
+
+Aritmética sobre `void*`, `puntero + puntero` y `* / %` con punteros son errores. `/` o `%` con una constante `0` es error `division entre cero`.
+
+**Asignabilidad** (asignación, inicialización, argumentos y `return`): `int` y `char` son intercambiables; puntero a puntero si son iguales o alguno es `void*`; puntero ← `int` solo con la constante nula (`0` o `(puntero)0`); `int` ← puntero es error. Las comparaciones aceptan enteros, punteros compatibles o puntero contra constante nula. Las condiciones de `if`/`while` deben ser escalares (entero o puntero).
+
+### 10.4 Funciones
+
+- Usar el nombre de una función como valor, o llamar a algo que no es función, es error.
+- Se verifican la cantidad y los tipos de los argumentos.
+- Un prototipo seguido de una definición con la misma firma es válido; firma distinta: `declaracion de 'f' en conflicto con la anterior`; dos cuerpos: `la funcion 'f' ya esta definida`.
+- `return` debe ser coherente con el tipo de la función: una función `void` no retorna valor y una no-`void` exige uno.
+- El inicializador de un global debe ser constante (literal, o `+`/`-` aplicado a uno).
+
+### 10.5 Verificación del propio compilador
+
+`make selfcheck` preprocesa con `cpp -P` los fuentes del compilador (`lexer`, `ast`, `symtab`, `sema`, `parser`) y los pasa por `tcc`, comprobando que el código cumple el subconjunto y supera su propio análisis semántico.

@@ -5,6 +5,9 @@
 
 /* Herramientas de depuración (solo gcc, fuera del subconjunto de bootstrap). */
 
+/* Si on != 0, las expresiones muestran " : tipo" (requiere analyze) */
+void ast_show_types(int on);
+
 /* Etiqueta de un nodo: "Binop +", "Decl char* s", "Num 5", ... */
 void ast_print_label(FILE *out, void *node);
 

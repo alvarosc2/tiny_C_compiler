@@ -10,7 +10,7 @@ OBJ_MAIN := $(patsubst src/main/%.c,$(BUILD)/main/%.o,$(SRC_MAIN))
 OBJ_LIB  := $(filter-out $(BUILD)/main/main.o,$(OBJ_MAIN))
 TEST_BIN := $(BUILD)/run_tests
 
-.PHONY: all build test run lex ast sanitize memcheck format clean help
+.PHONY: all build test run lex ast types selfcheck sanitize memcheck format clean help
 
 all: build
 
@@ -43,6 +43,19 @@ lex: build
 ast: build
 	./$(TARGET) --ast $(or $(FILE),examples/sample.c)
 
+# AST con tipos tras el analisis semantico
+types: build
+	./$(TARGET) --types $(or $(FILE),examples/sample.c)
+
+# El compilador verifica su propio codigo (preprocesado con cpp -P)
+SELF_SRC := lexer ast symtab sema parser
+selfcheck: build
+	@for f in $(SELF_SRC); do \
+		cpp -P -nostdinc -I src/main src/main/$$f.c > build/$$f.i && \
+		./$(TARGET) build/$$f.i || exit 1; \
+		echo "ok $$f.c"; \
+	done
+
 # Tests con AddressSanitizer + UBSan (recompila desde cero)
 sanitize:
 	$(MAKE) clean
@@ -64,6 +77,8 @@ help:
 	@echo "run       analiza un archivo: make run FILE=archivo.c"
 	@echo "lex       muestra los tokens (default examples/sample.c)"
 	@echo "ast       muestra el AST (default examples/sample.c)"
+	@echo "types     muestra el AST con tipos"
+	@echo "selfcheck verifica el propio codigo fuente del compilador"
 	@echo "sanitize  tests con ASan/UBSan"
 	@echo "memcheck  tests bajo valgrind"
 	@echo "format    clang-format"

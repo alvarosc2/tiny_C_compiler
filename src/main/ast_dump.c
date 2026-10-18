@@ -1,5 +1,6 @@
 #include "ast.h"
 #include "ast_dump.h"
+#include "sema.h"
 #include "token_dump.h"
 #include "tokens.h"
 
@@ -9,7 +10,13 @@ static void print_type(FILE *out, int type) {
     for (int i = 0; i < type_ptrs(type); i++) fputc('*', out);
 }
 
-void ast_print_label(FILE *out, void *n) {
+static int show_types;
+
+void ast_show_types(int on) {
+    show_types = on;
+}
+
+static void print_label_base(FILE *out, void *n) {
     switch (node_kind(n)) {
     case N_PROGRAM: fputs("Program", out); break;
     case N_FUNC:
@@ -43,6 +50,12 @@ void ast_print_label(FILE *out, void *n) {
     case N_CHR: fprintf(out, "Chr %d", node_value(n)); break;
     default: fprintf(out, "?%d", node_kind(n)); break;
     }
+}
+
+void ast_print_label(FILE *out, void *n) {
+    print_label_base(out, n);
+    if (show_types && node_kind(n) >= N_BINOP && node_kind(n) != N_CAST)
+        fprintf(out, " : %s", type_name(node_type(n)));
 }
 
 /* Los hijos están en a, b y c; cada uno puede ser una lista enlazada por next */
