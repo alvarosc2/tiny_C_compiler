@@ -12,7 +12,7 @@ TEST_BIN := $(BUILD)/run_tests
 RT_DIR   := $(BUILD)/runtime
 RT_OBJ   := $(RT_DIR)/start.o $(RT_DIR)/lib.o
 
-.PHONY: all build test run lex ast types asm exe selfhost selfcheck runtime sanitize memcheck format clean help
+.PHONY: install uninstall dist seed from-seed all build test run lex ast types asm exe selfhost selfcheck runtime sanitize memcheck format clean help
 
 all: build
 
@@ -82,6 +82,49 @@ selfhost: build runtime
 	done
 	@echo "auto-alojamiento OK: stage1 y stage2 generan el mismo codigo"
 
+# ---- instalacion y distribucion ----
+PREFIX  ?= /usr/local
+DESTDIR ?=
+NAME    ?= tinyc
+VERSION ?= 0.1.0
+# Compilador a instalar: stage2 (tcc sin libc). Tras `make from-seed`:
+#   make install STAGE=build/fromseed/stage
+STAGE   ?= $(BUILD)/stage2
+I_ROOT  := $(DESTDIR)$(PREFIX)
+
+$(BUILD)/stage2/tcc:
+	$(MAKE) selfhost
+
+install: $(STAGE)/tcc
+	install -d $(I_ROOT)/bin $(I_ROOT)/libexec/$(NAME) $(I_ROOT)/lib/$(NAME) $(I_ROOT)/include/$(NAME)
+	install -m 755 $(STAGE)/tcc $(I_ROOT)/libexec/$(NAME)/tcc
+	install -m 644 $(STAGE)/start.o $(STAGE)/lib.o $(I_ROOT)/lib/$(NAME)/
+	install -m 644 src/runtime/rt.h $(I_ROOT)/include/$(NAME)/rt.h
+	install -m 755 scripts/tinyc.sh $(I_ROOT)/bin/$(NAME)
+	@echo "instalado en $(I_ROOT): usa '$(NAME) entrada.c -o salida'"
+
+uninstall:
+	rm -f $(I_ROOT)/bin/$(NAME)
+	rm -rf $(I_ROOT)/libexec/$(NAME) $(I_ROOT)/lib/$(NAME) $(I_ROOT)/include/$(NAME)
+
+# Fuentes y seed/ (para construir con `make from-seed && make install STAGE=...`)
+DIST_FILES := Makefile .gitignore docs examples scripts seed src
+dist: seed
+	tar --exclude='*.o' --transform 's,^,$(NAME)-$(VERSION)/,' \
+		-czf $(BUILD)/$(NAME)-$(VERSION).tar.gz $(DIST_FILES)
+	@echo "$(BUILD)/$(NAME)-$(VERSION).tar.gz"
+
+# Guarda el ensamblador de stage2 en seed/ para arrancar sin gcc
+seed: selfhost
+	mkdir -p seed
+	rm -f seed/*.s
+	cp $(BUILD)/stage2/*.s seed/
+	@echo "seed/ actualizado ($$(ls seed | wc -l) archivos)"
+
+# Reconstruye el compilador solo con nasm y ld a partir de seed/
+from-seed:
+	scripts/fromseed.sh $(BUILD)/fromseed
+
 # El compilador verifica su propio codigo (preprocesado con cpp -P)
 SELF_SRC := lexer ast symtab sema codegen parser
 selfcheck: build
@@ -115,6 +158,10 @@ help:
 	@echo "asm       muestra el ensamblador NASM generado"
 	@echo "exe       compila a ejecutable: make exe FILE=x.c OUT=build/x"
 	@echo "selfhost  tcc se compila a si mismo (stage1, stage2) y compara"
+	@echo "install   instala (PREFIX=, DESTDIR=); uninstall lo quita"
+	@echo "dist      crea build/tinyc-VERSION.tar.gz con las fuentes y seed/"
+	@echo "seed      guarda el .s de stage2 en seed/"
+	@echo "from-seed reconstruye tcc desde seed/ solo con nasm y ld"
 	@echo "types     muestra el AST con tipos"
 	@echo "selfcheck verifica el propio codigo fuente del compilador"
 	@echo "sanitize  tests con ASan/UBSan"

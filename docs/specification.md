@@ -380,3 +380,29 @@ Cada módulo se preprocesa con `cpp -P -nostdinc -I src/main -I src/runtime`, se
 ### 12.4 Diferencias entre tcc0 y tcc1
 
 tcc1 solo ofrece `--check` y `--asm`. `--tokens`, `--ast` y `--types` (`token_dump.c`, `ast_dump.c`, `main.c`) existen solo en tcc0 porque usan libc y estructuras fuera del subconjunto. Ambas etapas generan exactamente el mismo ensamblador.
+
+### 12.4 Semilla de arranque
+
+`make seed` guarda en `seed/` el ensamblador de stage2 (8 archivos `.s`). `make from-seed` (`scripts/fromseed.sh`) ensambla y enlaza esa semilla con `nasm` y `ld`, sin gcc, y con ese compilador reconstruye todo; el resultado debe ser idéntico a `seed/`. Hay que ejecutar `make seed` y versionar `seed/` cada vez que cambie el compilador o la gramática. Siguen haciendo falta `cpp`, `nasm` y `ld`.
+
+## 13. Instalación y distribución
+
+`make install` (`PREFIX=/usr/local`, `DESTDIR` vacío por defecto) instala el compilador de stage2 (estático, sin libc) y el runtime precompilado:
+
+| Archivo | Destino |
+|---------|---------|
+| `tcc` | `$PREFIX/libexec/tinyc/tcc` |
+| `start.o`, `lib.o` | `$PREFIX/lib/tinyc/` |
+| `rt.h` | `$PREFIX/include/tinyc/` |
+| `scripts/tinyc.sh` | `$PREFIX/bin/tinyc` |
+
+El driver `tinyc [-S] [-o salida] entrada.c` ejecuta `cpp -P`, `tcc --asm`, `nasm` y `ld` con rutas relativas a su propia ubicación, así que la instalación es reubicable. `-S` solo escribe el ensamblador. `NAME` cambia el nombre del comando y de los directorios. `make uninstall` lo quita.
+
+`make dist` crea `build/tinyc-VERSION.tar.gz` (fuentes, documentación, ejemplos, scripts y `seed/`, sin objetos). Para construir e instalar desde el tarball sin gcc:
+
+```Text
+make from-seed
+make install STAGE=build/fromseed/stage
+```
+
+Dependencias en tiempo de ejecución: `cpp`, `nasm` y `ld`.
