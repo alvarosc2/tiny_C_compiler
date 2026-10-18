@@ -12,7 +12,7 @@ program     ::= (function | declaration)* ;
 
 ```Text
 function    ::= type identifier "(" parameters? ")" block ;
-parameters  ::= "void" | parameter ("," parameter)* ;
+parameters  ::= parameter ("," parameter)* ;
 parameter   ::= type identifier ;
 ```
 
@@ -39,34 +39,35 @@ Con esto ya puedes implementar punteros, que son esenciales para manejar memoria
 block       ::= "{" statement* "}" ;
 
 statement   ::= declaration
-              | expression ";"
+              | simple ;
+
+simple      ::= expression ("=" expression)? ";"       /* la asignación solo existe como sentencia */
               | return_statement
               | if_statement
-              | while_statement
-              | block ;
+              | while_statement ;
+
+body        ::= block | simple ;                        /* cuerpo de if/while: sin declaraciones */
 
 return_statement ::= "return" expression? ";" ;
 
-if_statement     ::= "if" "(" expression ")" statement ("else" statement)? ;
+if_statement     ::= "if" "(" expression ")" body ("else" body)? ;
 
-while_statement  ::= "while" "(" expression ")" statement ;
+while_statement  ::= "while" "(" expression ")" body ;
 ```
 
 ## 6. Expresiones
 
 ```Text
-expression  ::= assignment ;
-
-assignment  ::= logical_or ("=" assignment)? ;
+expression  ::= logical_or ;
 
 logical_or  ::= logical_and ("||" logical_and)* ;
 logical_and ::= equality ("&&" equality)* ;
 equality    ::= relational (("==" | "!=") relational)* ;
 relational  ::= additive (("<" | ">" | "<=" | ">=") additive)* ;
 additive    ::= multiplicative (("+" | "-") multiplicative)* ;
-multiplicative ::= unary (("*" | "/" | "%") unary)* ;
+multiplicative ::= unary (("*" | "/") unary)* ;
 
-unary       ::= ("+" | "-" | "!" | "*") unary
+unary       ::= ("!" | "*") unary
               | primary ;
 
 primary     ::= identifier
@@ -102,11 +103,9 @@ El compilador no implementa preprocesador. Antes de compilar, `make selfhost` ej
 declaration ::= type declarator ("=" expression)? ";"
               | type identifier "(" parameters? ")" ";" ;     /* prototipo */
 
-unary       ::= ("+" | "-" | "!" | "*") unary
+unary       ::= ("!" | "*") unary
               | "(" type ")" unary                              /* cast */
-              | postfix ;
-
-postfix     ::= primary ("[" expression "]" | "++" | "--")* ;
+              | primary ;
 
 primary     ::= identifier | number | string_literal | char_literal
               | "(" expression ")" | function_call ;
@@ -116,10 +115,8 @@ primary     ::= identifier | number | string_literal | char_literal
 |-----------|--------|
 | Prototipos | Declarar funciones externas (`alloc`, `memcpy`, `isalpha`, ...) sin `#include` de libc. |
 | Cast `(type) expr` | Leer/escribir campos de token: `*(int *)(p + 8) = x`. |
-| `p[i]` | Acceso a `src[pos]`. Equivale a `*(p + i)`. |
-| `++` / `--` postfijos | Usados en `advance()` (`src[pos++]`). |
 | `char_literal` | `'"'`, `'_'`, `'\n'`, `'0'`. Valor de tipo `int`. |
-| Tokens extra | `[`, `]`, `++`, `--`, `'...'` en el lexer. |
+| Tokens extra | `'...'` en el lexer. |
 
 ### 8.3 Restricciones de estilo para el código del compilador
 
@@ -127,6 +124,23 @@ primary     ::= identifier | number | string_literal | char_literal
 - Constantes con `#define` (ver `src/main/tokens.h`).
 - Estructuras de datos como bloques de memoria con offsets fijos (ej. token: `kind@0`, `text@8`, `value@16`, tamaño 24).
 - Sin `for`, `do`, `switch`, `break`, `continue`, `&`, `|`, `?:`: usar `while`/`if`.
+
+### 8.3.1 Construcciones eliminadas en la revisión de la gramática
+
+Medidas sobre el AST del propio compilador, estas construcciones no aportaban nada, así que se quitaron. Todas dan error de sintaxis:
+
+| Eliminado | Se escribe como |
+|-----------|-----------------|
+| `p[i]` | `*(p + i)` |
+| `x++`, `x--` | `x = x + 1`, `x = x - 1` |
+| `a % b` | `a - a / b * b` |
+| `-x`, `+x` unarios | `0 - x` |
+| `f(void)` | `f()` |
+| asignación dentro de expresiones (`a = b = c`, `f(a = 1)`) | una sentencia por asignación |
+| bloque suelto `{ ... }` como sentencia | solo como cuerpo de función, `if` o `while` |
+| declaración como cuerpo de `if`/`while` sin llaves | usar `{ ... }` |
+
+Los caracteres `[`, `]` y `%` siguen siendo tokens del lexer, pero el parser los rechaza.
 - Variables globales declaradas con tipo e inicializador opcional constante.
 - Un solo archivo de salida por compilación; el enlazado lo hace `cc`/`ld`.
 
@@ -153,8 +167,8 @@ Descenso recursivo con un token de anticipación (`peek`). Hay una función por 
 - **Cast o paréntesis:** tras `(`, si el siguiente token es `int`, `char` o `void` es un cast; si no, es una expresión entre paréntesis.
 - **Llamada:** un `identifier` seguido de `(`.
 - **Niveles binarios** (`||` hasta `*`): un bucle `while` por nivel, con asociatividad izquierda.
-- **Asignación:** recursiva, con asociatividad derecha. El lado izquierdo debe ser un l‑value: `N_ID`, `N_INDEX` o `N_UNOP` con `*`. Si no, es un error.
-- **Posfijos** (`[ ]`, `++`, `--`): bucle después de `primary`.
+- **Asignación:** solo como sentencia (`expression "=" expression ";"`). El lado izquierdo debe ser un l‑value: `N_ID` o `N_UNOP` con `*`. Si no, es un error. Se representa como `N_EXPR_STMT` con un `N_BINOP '='`.
+- **Cuerpo de `if`/`while`:** un bloque o una sentencia simple; nunca una declaración.
 
 ### 9.2 Nodos del AST
 
@@ -179,8 +193,6 @@ kind@0  line@4  col@8  value@12  a@16  b@24  c@32  next@40  text@48  type@56  de
 | `N_BINOP` | `value` = token del operador, `a` = izquierda, `b` = derecha |
 | `N_UNOP` | `value` = token del operador, `a` = operando |
 | `N_CAST` | `type` = tipo destino, `a` = operando |
-| `N_INDEX` | `a` = base, `b` = índice |
-| `N_POSTFIX` | `value` = `T_INC` o `T_DEC`, `a` = operando |
 | `N_CALL` | `text` = nombre, `a` = primer argumento |
 | `N_ID`, `N_STR` | `text` |
 | `N_NUM`, `N_CHR` | `value` |
@@ -229,7 +241,7 @@ tcc --asm archivo.c      ensamblador NASM (sección 11)                 (make as
 
 ### 9.6 Fuera de alcance
 
-`for`, `do`, `switch`, `break`, `continue`, `struct`, `enum` y arreglos declarados quedan excluidos. Al terminar el parser se revisará qué extensiones de la sección 8.2 pueden eliminarse para simplificar la gramática.
+`for`, `do`, `switch`, `break`, `continue`, `struct`, `enum` y arreglos declarados quedan excluidos. La gramática ya se revisó y simplificó: ver la sección 8.3.1 para las construcciones eliminadas.
 
 ## 10. Análisis semántico
 
@@ -244,7 +256,7 @@ char *type_name(int t);        /* "int", "char*", "<error>" */
 
 ### 10.2 Ámbitos
 
-- Los globales viven en el ámbito 0. Parámetros y cuerpo de una función comparten ámbito; cada bloque anidado y cada cuerpo de `if`/`while` abre uno nuevo.
+- Los globales viven en el ámbito 0. Parámetros y cuerpo de una función comparten ámbito; cada bloque de `if`/`while` abre uno nuevo.
 - Todo se declara antes de usarse; las funciones externas necesitan prototipo.
 - Redeclarar un nombre en el mismo ámbito es error; ocultar uno de un ámbito exterior es válido.
 - El inicializador de una variable local se analiza **antes** de declararla (`int a = a;` usa el `a` exterior). Es una desviación respecto a C.
@@ -256,17 +268,15 @@ char *type_name(int t);        /* "int", "char*", "<error>" */
 |-----------|------|
 | `N_NUM`, `N_CHR` | `int` |
 | `N_STR` | `char*` |
-| `int`/`char` entre sí con `+ - * / %`, `-` y `+` unarios | `int` |
+| `int`/`char` entre sí con `+ - * /` | `int` |
 | `puntero ± int`, `int + puntero` | el del puntero |
 | `puntero - puntero` (mismo tipo) | `int` |
 | `< > <= >= == != && \|\| !` | `int` |
 | `*p` | tipo apuntado (`p` no puede ser `void*`) |
-| `p[i]` | tipo apuntado; `i` entero |
-| `x++`, `x--` | tipo de `x`; `x` debe ser id, índice o `*` |
 | llamada | tipo de retorno |
-| asignación | tipo del lado izquierdo |
+| asignación (sentencia) | tipo del lado izquierdo |
 
-Aritmética sobre `void*`, `puntero + puntero` y `* / %` con punteros son errores. `/` o `%` con una constante `0` es error `division entre cero`.
+Aritmética sobre `void*`, `puntero + puntero` y `* /` con punteros son errores. `/` con una constante `0` es error `division entre cero`.
 
 **Asignabilidad** (asignación, inicialización, argumentos y `return`): `int` y `char` son intercambiables; puntero a puntero si son iguales o alguno es `void*`; puntero ← `int` solo con la constante nula (`0` o `(puntero)0`); `int` ← puntero es error. Las comparaciones aceptan enteros, punteros compatibles o puntero contra constante nula. Las condiciones de `if`/`while` deben ser escalares (entero o puntero).
 

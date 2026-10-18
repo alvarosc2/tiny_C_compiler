@@ -21,22 +21,22 @@ Test(parser_err, missing_semicolon_recovers_at_next_type) {
 }
 
 Test(parser_err, reports_several_errors) {
-    cr_assert_eq(errors_of("void f(void) {\n  int a = ;\n  int b = ;\n}\n"), 2);
+    cr_assert_eq(errors_of("void f() {\n  int a = ;\n  int b = ;\n}\n"), 2);
     cr_assert_str_eq(error_log(),
         "<entrada>:2:11: error: se esperaba una expresion y se encontro ';'\n"
         "<entrada>:3:11: error: se esperaba una expresion y se encontro ';'\n");
 }
 
 Test(parser_err, keeps_parsing_after_bad_function) {
-    char *src = "void f(void) { int a = ; }\nint g() { return 1; }";
+    char *src = "void f() { int a = ; }\nint g() { return 1; }";
     cr_assert_eq(errors_of(src), 1);
     cr_assert_not_null(strstr(sexpr(src), "(Func int g (Block (Return (Num 1))))"));
 }
 
 Test(parser_err, unclosed_block) {
-    cr_assert_eq(errors_of("void f(void) {"), 1);
+    cr_assert_eq(errors_of("void f() {"), 1);
     cr_assert_str_eq(error_log(),
-        "<entrada>:1:15: error: se esperaba '}' y se encontro fin de archivo\n");
+        "<entrada>:1:11: error: se esperaba '}' y se encontro fin de archivo\n");
 }
 
 Test(parser_err, lexer_error_is_reported_once) {
@@ -50,13 +50,13 @@ Test(parser_err, number_too_large) {
 }
 
 Test(parser_err, not_assignable) {
-    cr_assert_eq(errors_of("void f(void) { 1 = 2; }"), 1);
+    cr_assert_eq(errors_of("void f() { 1 = 2; }"), 1);
     cr_assert_str_eq(error_log(),
-        "<entrada>:1:18: error: el lado izquierdo de '=' no es asignable\n");
+        "<entrada>:1:14: error: el lado izquierdo de '=' no es asignable\n");
 }
 
 Test(parser_err, binary_result_not_assignable) {
-    cr_assert_eq(errors_of("void f(void) { a + b = 2; }"), 1);
+    cr_assert_eq(errors_of("void f() { a + b = 2; }"), 1);
 }
 
 Test(parser_err, stray_token_at_top_level) {
@@ -87,40 +87,40 @@ Test(parser_err, parameter_without_name) {
 }
 
 Test(parser_err, missing_close_paren_in_if) {
-    cr_assert_eq(errors_of("void f(void) { if (a b; }"), 1);
+    cr_assert_eq(errors_of("void f() { if (a b; }"), 1);
     cr_assert_str_eq(error_log(),
-        "<entrada>:1:22: error: se esperaba ')' y se encontro identificador 'b'\n");
+        "<entrada>:1:18: error: se esperaba ')' y se encontro identificador 'b'\n");
 }
 
 Test(parser_err, missing_close_paren_in_call) {
-    cr_assert_eq(errors_of("void f(void) { g(1; }"), 1);
-    cr_assert_str_eq(error_log(), "<entrada>:1:19: error: se esperaba ')' y se encontro ';'\n");
+    cr_assert_eq(errors_of("void f() { g(1; }"), 1);
+    cr_assert_str_eq(error_log(), "<entrada>:1:15: error: se esperaba ')' y se encontro ';'\n");
 }
 
 Test(parser_err, unknown_character) {
-    cr_assert_eq(errors_of("void f(void) { a @ b; }"), 1);
-    cr_assert_str_eq(error_log(), "<entrada>:1:18: error: se esperaba ';' y se encontro '@'\n");
+    cr_assert_eq(errors_of("void f() { a @ b; }"), 1);
+    cr_assert_str_eq(error_log(), "<entrada>:1:14: error: se esperaba ';' y se encontro '@'\n");
 }
 
 Test(parser_err, else_without_if) {
-    cr_assert_eq(errors_of("void f(void) { else; }"), 1);
+    cr_assert_eq(errors_of("void f() { else; }"), 1);
     cr_assert_str_eq(error_log(),
-        "<entrada>:1:16: error: se esperaba una expresion y se encontro 'else'\n");
+        "<entrada>:1:12: error: se esperaba una expresion y se encontro 'else'\n");
 }
 
 Test(parser_err, missing_function_body) {
-    cr_assert_eq(errors_of("int f(void) int x;"), 1);
+    cr_assert_eq(errors_of("int f() int x;"), 1);
     cr_assert_str_eq(error_log(),
-        "<entrada>:1:13: error: se esperaba '{' o ';' y se encontro 'int'\n");
+        "<entrada>:1:9: error: se esperaba '{' o ';' y se encontro 'int'\n");
 }
 
 Test(parser_err, errors_in_nested_blocks) {
-    char *src = "void f(void) {\n  while (a) {\n    b = ;\n  }\n  c = ;\n}";
+    char *src = "void f() {\n  while (a) {\n    b = ;\n  }\n  c = ;\n}";
     cr_assert_eq(errors_of(src), 2);
 }
 
 Test(parser_err, statement_after_error_is_kept) {
-    char *src = "void f(void) { a = ; return 1; }";
+    char *src = "void f() { a = ; return 1; }";
     cr_assert_eq(errors_of(src), 1);
     cr_assert_str_eq(sexpr(src), "(Program (Func void f (Block (Return (Num 1)))))");
 }
@@ -147,4 +147,24 @@ Test(parser_err, source_name_in_message) {
     parse("int x = ;");
     cr_assert_str_eq(error_log(),
         "prueba.c:1:9: error: se esperaba una expresion y se encontro ';'\n");
+}
+
+static inline void rejects(char *src) {
+    cr_assert_gt(errors_of(src), 0, "debia fallar: %s", src);
+}
+
+Test(parser_err, removed_constructs_are_syntax_errors) {
+    rejects("void f() { i++; }");
+    rejects("void f() { i--; }");
+    rejects("void f() { a[0]; }");
+    rejects("void f() { a % b; }");
+    rejects("void f() { -a; }");
+    rejects("void f() { +a; }");
+    rejects("void f(void) { }");
+    rejects("void f() { a = b = c; }");
+    rejects("void f() { g(a = 1); }");
+    rejects("void f() { int x; x = (y = 1); }");
+    rejects("void f() { { } }");
+    rejects("void f() { if (a) int b; }");
+    rejects("void f() { while (a) int b; }");
 }

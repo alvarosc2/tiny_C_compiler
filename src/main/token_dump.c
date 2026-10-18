@@ -10,8 +10,6 @@ static const char *two_char_spelling(int kind) {
     case T_GE: return ">=";
     case T_AND: return "&&";
     case T_OR: return "||";
-    case T_INC: return "++";
-    case T_DEC: return "--";
     }
     return NULL;
 }

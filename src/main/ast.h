@@ -14,13 +14,11 @@
 #define N_BINOP     10
 #define N_UNOP      11
 #define N_CAST      12
-#define N_INDEX     13
-#define N_POSTFIX   14
-#define N_CALL      15
-#define N_ID        16
-#define N_STR       17
-#define N_NUM       18
-#define N_CHR       19
+#define N_CALL      13
+#define N_ID        14
+#define N_STR       15
+#define N_NUM       16
+#define N_CHR       17
 
 /* Layout del nodo (LP64), 72 bytes:
    kind@0 line@4 col@8 value@12 a@16 b@24 c@32 next@40 text@48 type@56 decl@64
@@ -42,7 +40,7 @@
 #define TYPE_PTR_UNIT 1000
 
 /* Tipo de una expresión con error semántico: silencia errores en cascada */
-#define TY_ERR (-1)
+#define TY_ERR (0 - 1)
 
 void *node_new(int kind, int line, int col);
 

@@ -30,5 +30,5 @@ void node_set_text(void *n, char *v) { *(char **)((char *)n + NODE_TEXT_OFF) = v
 void node_set_type(void *n, int v) { *(int *)((char *)n + NODE_TYPE_OFF) = v; }
 void node_set_decl(void *n, void *v) { *(void **)((char *)n + NODE_DECL_OFF) = v; }
 
-int type_base(int t) { return t % TYPE_PTR_UNIT; }
+int type_base(int t) { return t - t / TYPE_PTR_UNIT * TYPE_PTR_UNIT; }
 int type_ptrs(int t) { return t / TYPE_PTR_UNIT; }

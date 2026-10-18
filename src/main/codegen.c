@@ -160,22 +160,15 @@ void g_store_id(int t, void *d) {
 
 // ---------- expresiones ----------
 
-// Deja en rax la dirección de un lvalue
+// Deja en rax la dirección de un lvalue: una variable o *puntero
 void g_addr(void *n) {
     int k = node_kind(n);
     if (k == N_ID) {
         emit("    lea rax, ");
         g_mem(node_decl(n));
         emit("\n");
-    } else if (k == N_UNOP) {
-        g_expr(node_a(n));
     } else {
         g_expr(node_a(n));
-        g_push();
-        g_expr(node_b(n));
-        g_scale("rax", g_size(node_type(n)));
-        g_pop("rcx");
-        g_line("add rax, rcx");
     }
 }
 
@@ -319,10 +312,9 @@ void g_binop(void *n) {
     else if (op == '*') {
         g_line("imul rax, rcx");
         g_norm(T_INT);
-    } else if (op == '/' || op == '%') {
+    } else if (op == '/') {
         g_line("cqo");
         g_line("idiv rcx");
-        if (op == '%') g_line("mov rax, rdx");
         g_norm(T_INT);
     } else {
         g_compare(op, g_is_ptr(lt) || g_is_ptr(rt));
@@ -346,25 +338,6 @@ void g_unop(void *n) {
     }
 }
 
-// x++ / x--: el resultado es el valor anterior
-void g_postfix(void *n) {
-    int t = node_type(n);
-    int step = 1;
-    if (g_is_ptr(t)) step = g_pointee(t);
-    g_addr(node_a(n));
-    g_line("mov rdx, rax");
-    g_load_head(t);
-    emit("[rdx]\n");
-    emit("    lea rcx, [rax");
-    if (node_value(n) == T_DEC) emit("-");
-    else emit("+");
-    emit_int(step);
-    emit("]\n");
-    g_store_head(t);
-    emit("[rdx]");
-    g_store_tail(t);
-}
-
 void g_call(void *n) {
     int count = 0;
     void *a = node_a(n);
@@ -379,7 +352,7 @@ void g_call(void *n) {
         g_pop(g_reg(count));
     }
     // La pila debe estar alineada a 16 bytes en el call
-    int pad = g_depth % 2;
+    int pad = g_depth - g_depth / 2 * 2;
     if (pad) g_op_imm("sub", "rsp", 8);
     emit("    call _");
     emit(node_text(n));
@@ -400,11 +373,6 @@ void g_expr(void *n) {
         g_load_head(node_type(n));
         g_mem(node_decl(n));
         emit("\n");
-    } else if (k == N_INDEX) {
-        g_addr(n);
-        g_line("mov rdx, rax");
-        g_load_head(node_type(n));
-        emit("[rdx]\n");
     } else if (k == N_CALL) {
         g_call(n);
     } else if (k == N_CAST) {
@@ -412,8 +380,6 @@ void g_expr(void *n) {
         g_norm(node_type(n));
     } else if (k == N_UNOP) {
         g_unop(n);
-    } else if (k == N_POSTFIX) {
-        g_postfix(n);
     } else {
         g_binop(n);
     }
@@ -539,8 +505,8 @@ void g_string_data(void *n) {
     emit("S");
     emit_int(node_value(n));
     emit(": db ");
-    while (t[i] != 0) {
-        int c = t[i];
+    while (*(t + i) != 0) {
+        int c = *(t + i);
         if (c >= 32 && c < 127 && c != '"') {
             if (!open) {
                 if (!first) emit(", ");
@@ -565,15 +531,6 @@ void g_string_data(void *n) {
     emit("0\n");
 }
 
-int g_const(void *e) {
-    int k = node_kind(e);
-    if (k == N_UNOP) {
-        if (node_value(e) == '-') return 0 - g_const(node_a(e));
-        return g_const(node_a(e));
-    }
-    return node_value(e);
-}
-
 void g_global(void *d) {
     int t = node_type(d);
     void *init = node_a(d);
@@ -587,7 +544,7 @@ void g_global(void *d) {
     else if (node_kind(init) == N_STR) {
         emit("S");
         emit_int(node_value(init));
-    } else emit_int(g_const(init));
+    } else emit_int(node_value(init));
     emit("\n");
 }
 

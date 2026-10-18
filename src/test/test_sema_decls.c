@@ -9,29 +9,29 @@ Test(sema_decl, valid_program) {
     cr_assert_eq(check("int g = 1; char *m = \"x\";\n"
                        "int add(int a, int b);\n"
                        "int add(int a, int b) { return a + b; }\n"
-                       "int main(void) { int k = add(g, 2); return k; }"), 0);
+                       "int main() { int k = add(g, 2); return k; }"), 0);
 }
 
 Test(sema_decl, use_before_declare) {
-    e1("int f(void) { return g(); }\nint g(void) { return 1; }",
-       "<entrada>:1:22: error: funcion 'g' no declarada\n");
+    e1("int f() { return g(); }\nint g() { return 1; }",
+       "<entrada>:1:18: error: funcion 'g' no declarada\n");
 }
 
 Test(sema_decl, redeclared_same_scope) {
-    e1("void f(void) { int a; int a; }",
-       "<entrada>:1:23: error: 'a' ya esta declarado en este ambito\n");
+    e1("void f() { int a; int a; }",
+       "<entrada>:1:19: error: 'a' ya esta declarado en este ambito\n");
 }
 
 Test(sema_decl, shadowing_is_allowed) {
-    cr_assert_eq(check("int a; void f(int a) { { int a = 1; a = 2; } }"), 0);
+    cr_assert_eq(check("int a; void f(int a) { while (a) { int a = 1; a = 2; } }"), 0);
 }
 
 Test(sema_decl, block_scope_ends) {
-    cr_assert_eq(check("void f(void) { { int a; } a = 1; }"), 1);
+    cr_assert_eq(check("void f() { while (1) { int a; } a = 1; }"), 1);
 }
 
-Test(sema_decl, if_body_has_own_scope) {
-    cr_assert_eq(check("void f(void) { if (1) int a; a = 1; }"), 1);
+Test(sema_decl, if_block_has_own_scope) {
+    cr_assert_eq(check("void f() { if (1) { int a; } a = 1; }"), 1);
 }
 
 Test(sema_decl, param_and_local_clash) {
@@ -57,7 +57,7 @@ Test(sema_decl, global_init_must_be_constant) {
 }
 
 Test(sema_decl, local_init_sees_outer_name) {
-    cr_assert_eq(check("int a; void f(void) { int a = a; }"), 0);
+    cr_assert_eq(check("int a; void f() { int a = a; }"), 0);
 }
 
 Test(sema_decl, prototype_then_definition) {
@@ -71,17 +71,17 @@ Test(sema_decl, conflicting_signature) {
 }
 
 Test(sema_decl, defined_twice) {
-    e1("void f(void) { }\nvoid f(void) { }",
+    e1("void f() { }\nvoid f() { }",
        "<entrada>:2:1: error: la funcion 'f' ya esta definida\n");
 }
 
 Test(sema_decl, return_checks) {
-    e1("void f(void) { return 1; }",
-       "<entrada>:1:16: error: una funcion void no puede retornar un valor\n");
-    e1("int f(void) { return; }",
-       "<entrada>:1:15: error: se esperaba un valor de retorno de tipo 'int'\n");
-    e1("int f(void) { return \"a\"; }",
-       "<entrada>:1:22: error: no se puede retornar 'char*' en una funcion que retorna 'int'\n");
+    e1("void f() { return 1; }",
+       "<entrada>:1:12: error: una funcion void no puede retornar un valor\n");
+    e1("int f() { return; }",
+       "<entrada>:1:11: error: se esperaba un valor de retorno de tipo 'int'\n");
+    e1("int f() { return \"a\"; }",
+       "<entrada>:1:18: error: no se puede retornar 'char*' en una funcion que retorna 'int'\n");
 }
 
 Test(sema_decl, recursion_and_annotations) {

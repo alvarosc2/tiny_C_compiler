@@ -9,7 +9,7 @@ Test(lexer_operators, single_and_double) {
         {"=", '='}, {"!", '!'}, {"<", '<'}, {">", '>'},
         {"(", '('}, {")", ')'}, {"{", '{'}, {"}", '}'}, {",", ','}, {";", ';'},
         {"==", T_EQ}, {"!=", T_NE}, {"<=", T_LE}, {">=", T_GE},
-        {"&&", T_AND}, {"||", T_OR}, {"++", T_INC}, {"--", T_DEC},
+        {"&&", T_AND}, {"||", T_OR},
         {"[", '['}, {"]", ']'},
     };
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
@@ -49,23 +49,23 @@ Test(lexer_operators, expression) {
         cr_assert_eq(token_kind(next_token()), expected[i], "token %u", i);
 }
 
-Test(lexer_operators, increment_vs_plus) {
+Test(lexer_operators, plus_plus_is_two_tokens) {
     lexer_init("a++ + b+++c");
-    int expected[] = {T_ID, T_INC, '+', T_ID, T_INC, '+', T_ID, T_EOF};
+    int expected[] = {T_ID, '+', '+', '+', T_ID, '+', '+', '+', T_ID, T_EOF};
     for (unsigned i = 0; i < sizeof(expected) / sizeof(expected[0]); i++)
         cr_assert_eq(token_kind(next_token()), expected[i], "token %u", i);
 }
 
-Test(lexer_operators, decrement_and_minus) {
+Test(lexer_operators, minus_minus_is_two_tokens) {
     lexer_init("a-- - -b");
-    int expected[] = {T_ID, T_DEC, '-', '-', T_ID, T_EOF};
+    int expected[] = {T_ID, '-', '-', '-', '-', T_ID, T_EOF};
     for (unsigned i = 0; i < sizeof(expected) / sizeof(expected[0]); i++)
         cr_assert_eq(token_kind(next_token()), expected[i], "token %u", i);
 }
 
 Test(lexer_operators, indexing) {
     lexer_init("src[pos++]");
-    int expected[] = {T_ID, '[', T_ID, T_INC, ']', T_EOF};
+    int expected[] = {T_ID, '[', T_ID, '+', '+', ']', T_EOF};
     for (unsigned i = 0; i < sizeof(expected) / sizeof(expected[0]); i++)
         cr_assert_eq(token_kind(next_token()), expected[i], "token %u", i);
 }

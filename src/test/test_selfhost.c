@@ -9,7 +9,7 @@ Test(selfhost, fixed_point_and_behavior) {
     cr_assert_eq(system("for f in /tmp/tcc_self/s1/*.s; do "
                         "cmp $f /tmp/tcc_self/s2/$(basename $f) || exit 1; done"), 0);
     cr_assert_neq(system("ldd /tmp/tcc_self/s2/tcc >/dev/null 2>&1"), 0);
-    cr_assert_eq(system("printf 'int main(void) { return x; }' > /tmp/tcc_self/e.c && "
+    cr_assert_eq(system("printf 'int main() { return x; }' > /tmp/tcc_self/e.c && "
                         "/tmp/tcc_self/s2/tcc /tmp/tcc_self/e.c 2>/dev/null"), 256);
     cr_assert_eq(system("/tmp/tcc_self/s2/tcc 2>/dev/null"), 512);
     system("rm -rf /tmp/tcc_self");

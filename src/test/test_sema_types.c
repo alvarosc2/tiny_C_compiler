@@ -20,7 +20,6 @@ Test(sema_types, variables) {
 Test(sema_types, arithmetic) {
     t("i + c", "int");
     t("c * 2", "int");
-    t("-c", "int");
     t("!s", "int");
 }
 
@@ -29,14 +28,14 @@ Test(sema_types, pointer_arithmetic) {
     t("1 + ip", "int*");
     t("ip - 1", "int*");
     t("ip - ip", "int");
-    t("ip++", "int*");
+    t("ip + i", "int*");
 }
 
-Test(sema_types, deref_index_cast) {
+Test(sema_types, deref_and_cast) {
     t("*ip", "int");
     t("*pp", "int*");
-    t("s[i]", "char");
-    t("pp[0][1]", "int");
+    t("*(s + i)", "char");
+    t("*(*(pp + 1) + 2)", "int");
     t("(char *)vp", "char*");
     t("(int)c", "int");
 }

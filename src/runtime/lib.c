@@ -22,21 +22,21 @@ void *alloc(int n) {
 void copy_mem(char *dst, char *src, int n) {
     int i = 0;
     while (i < n) {
-        dst[i] = src[i];
+        *(dst + i) = *(src + i);
         i = i + 1;
     }
 }
 
 int str_len(char *s) {
     int n = 0;
-    while (s[n] != 0) n = n + 1;
+    while (*(s + n) != 0) n = n + 1;
     return n;
 }
 
 int str_eq(char *a, char *b) {
     int i = 0;
-    while (a[i] != 0 && a[i] == b[i]) i = i + 1;
-    return a[i] == b[i];
+    while (*(a + i) != 0 && *(a + i) == *(b + i)) i = i + 1;
+    return *(a + i) == *(b + i);
 }
 
 char *str_cat(char *a, char *b) {
@@ -50,7 +50,7 @@ char *str_cat(char *a, char *b) {
 
 void print_char(int c) {
     char *b = alloc(1);
-    b[0] = c;
+    *(b + 0) = c;
     sys_write(1, b, 1);
 }
 
@@ -66,16 +66,16 @@ char *int_to_str(int n) {
     if (n > 0) n = 0 - n;
     if (n == 0) {
         i = i - 1;
-        buf[i] = '0';
+        *(buf + i) = '0';
     }
     while (n != 0) {
         i = i - 1;
-        buf[i] = '0' - n % 10;
+        *(buf + i) = '0' - (n - n / 10 * 10);
         n = n / 10;
     }
     if (neg) {
         i = i - 1;
-        buf[i] = '-';
+        *(buf + i) = '-';
     }
     return buf + i;
 }
@@ -116,7 +116,7 @@ char *read_file(char *path) {
         n = sys_read(fd, buf + len, cap - len);
     }
     sys_close(fd);
-    buf[len] = 0;
+    *(buf + len) = 0;
     return buf;
 }
 
@@ -176,7 +176,7 @@ void em_room(int extra) {
 void emit_reset() {
     em_len = 0;
     em_room(0);
-    em_buf[0] = 0;
+    *(em_buf + 0) = 0;
 }
 
 void emit(char *s) {
@@ -188,9 +188,9 @@ void emit(char *s) {
 
 void emit_char(int c) {
     em_room(1);
-    em_buf[em_len] = c;
+    *(em_buf + em_len) = c;
     em_len = em_len + 1;
-    em_buf[em_len] = 0;
+    *(em_buf + em_len) = 0;
 }
 
 void emit_int(int n) {

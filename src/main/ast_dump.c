@@ -41,8 +41,6 @@ static void print_label_base(FILE *out, void *n) {
         fputs("Cast ", out);
         print_type(out, node_type(n));
         break;
-    case N_INDEX: fputs("Index", out); break;
-    case N_POSTFIX: fprintf(out, "Postfix %s", token_spelling(node_value(n))); break;
     case N_CALL: fprintf(out, "Call %s", node_text(n)); break;
     case N_ID: fprintf(out, "Id %s", node_text(n)); break;
     case N_STR: fprintf(out, "Str \"%s\"", node_text(n)); break;

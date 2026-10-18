@@ -32,13 +32,13 @@ Test(token_dump, declaration) {
 
 Test(token_dump, strings_chars_and_operators) {
     char buf[512] = {0};
-    dump_to_buffer("\"hi\" 'a' '\\n' <= ++", buf, sizeof(buf));
+    dump_to_buffer("\"hi\" 'a' '\\n' <= &&", buf, sizeof(buf));
     cr_assert_str_eq(buf,
         "1:1: <Cadena> \"hi\"\n"
         "1:6: <Caracter> 'a' (97)\n"
         "1:10: <Caracter> (10)\n"
         "1:15: <Operador> <=\n"
-        "1:18: <Operador> ++\n"
+        "1:18: <Operador> &&\n"
         "1:20: <Fin>\n");
 }
 

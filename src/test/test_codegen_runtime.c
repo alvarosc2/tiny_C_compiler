@@ -19,7 +19,7 @@ Test(codegen_rt, string_helpers) {
 }
 
 Test(codegen_rt, large_allocation) {
-    cr_assert_str_eq(output_of("", "char *p = alloc(3000000); p[2999999] = 'x'; print_char(p[2999999]);"), "x");
+    cr_assert_str_eq(output_of("", "char *p = alloc(3000000); *(p + 2999999) = 'x'; print_char(*(p + 2999999));"), "x");
 }
 
 Test(codegen_rt, hello_example) {

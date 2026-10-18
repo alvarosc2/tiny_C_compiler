@@ -5,7 +5,7 @@ int fact(int n) {
     return n * fact(n - 1);
 }
 
-int main(void) {
+int main() {
     int i = 1;
     print_str("Factoriales:\n");
     while (i <= 10) {
@@ -13,7 +13,7 @@ int main(void) {
         print_str("! = ");
         print_int(fact(i));
         print_char('\n');
-        i++;
+        i = i + 1;
     }
     return 0;
 }

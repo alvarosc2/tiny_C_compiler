@@ -27,11 +27,11 @@ void lexer_init(char *source) {
 }
 
 int next_char() {
-    return src[pos];
+    return *(src + pos);
 }
 
 int advance() {
-    int c = src[pos];
+    int c = *(src + pos);
     if (c == 0) return 0; // nunca avanzar más allá del fin
     pos = pos + 1;
     if (c == '\n') {
@@ -58,7 +58,7 @@ char *read_identifier() {
     int len = pos - start;
     char *p = alloc(len + 1);
     copy_mem(p, src + start, len);
-    p[len] = 0;
+    *(p + len) = 0;
     return p;
 }
 
@@ -86,20 +86,20 @@ char *read_string() {
     int i = 0;
     int j = 0;
     while (i < len) {
-        int c = src[start + i];
+        int c = *(src + start + i);
         i = i + 1;
         // Escapes: \n \t \r \\ \" ; cualquier otro \x produce x
         if (c == '\\' && i < len) {
-            c = src[start + i];
+            c = *(src + start + i);
             i = i + 1;
             if (c == 'n') c = '\n';
             if (c == 't') c = '\t';
             if (c == 'r') c = '\r';
         }
-        p[j] = c;
+        *(p + j) = c;
         j = j + 1;
     }
-    p[j] = 0;
+    *(p + j) = 0;
     advance(); // skip closing "
     return p;
 }
@@ -195,8 +195,6 @@ void *next_token() {
     if (c == '>' && d == '=') { advance(); return make_token(T_GE, 0, 0); }
     if (c == '&' && d == '&') { advance(); return make_token(T_AND, 0, 0); }
     if (c == '|' && d == '|') { advance(); return make_token(T_OR, 0, 0); }
-    if (c == '+' && d == '+') { advance(); return make_token(T_INC, 0, 0); }
-    if (c == '-' && d == '-') { advance(); return make_token(T_DEC, 0, 0); }
 
     // Operadores simples
     return make_token(c, 0, 0);

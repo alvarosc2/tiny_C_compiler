@@ -37,11 +37,11 @@ char *s_q2(char *a, char *x, char *b, char *y) {
 char *s_itoa(int n) {
     if (n < 10) {
         char *d = alloc(2);
-        d[0] = '0' + n;
-        d[1] = 0;
+        *(d + 0) = '0' + n;
+        *(d + 1) = 0;
         return d;
     }
-    return str_cat(s_itoa(n / 10), s_itoa(n % 10));
+    return str_cat(s_itoa(n / 10), s_itoa(n - n / 10 * 10));
 }
 
 char *s_count(int n, char *word) {
@@ -57,11 +57,9 @@ char *s_op_name(int k) {
     if (k == T_GE) return ">=";
     if (k == T_AND) return "&&";
     if (k == T_OR) return "||";
-    if (k == T_INC) return "++";
-    if (k == T_DEC) return "--";
     char *s = alloc(2);
-    s[0] = k;
-    s[1] = 0;
+    *(s + 0) = k;
+    *(s + 1) = 0;
     return s;
 }
 
@@ -210,51 +208,10 @@ int s_unop(void *n) {
         }
         return s_set(n, t - TYPE_PTR_UNIT);
     }
-    if (op == '!') {
-        if (!s_is_scalar(t)) {
-            return s_fail(n, s_q("operando invalido para '!': ", type_name(t), ""));
-        }
-        return s_set(n, T_INT);
-    }
-    if (!s_is_int(t)) {
-        return s_fail(n, s_q(str_cat("operando invalido para ", s_q("", s_op_name(op), ": ")),
-                             type_name(t), ""));
+    if (!s_is_scalar(t)) {
+        return s_fail(n, s_q("operando invalido para '!': ", type_name(t), ""));
     }
     return s_set(n, T_INT);
-}
-
-int s_lvalue(void *n) {
-    int k = node_kind(n);
-    if (k == N_ID || k == N_INDEX) return 1;
-    return k == N_UNOP && node_value(n) == '*';
-}
-
-int s_postfix(void *n) {
-    void *e = node_a(n);
-    int t = s_expr(e);
-    if (t == TY_ERR) return s_set(n, TY_ERR);
-    char *op = s_op_name(node_value(n));
-    if (!s_lvalue(e)) {
-        return s_fail(n, s_q("el operando de ", op, " debe ser una variable modificable"));
-    }
-    if (!s_is_int(t) && !(s_is_ptr(t) && !s_is_void_ptr(t))) {
-        return s_fail(n, s_q(str_cat("operando invalido para ", s_q("", op, ": ")),
-                             type_name(t), ""));
-    }
-    return s_set(n, t);
-}
-
-int s_index(void *n) {
-    int bt = s_expr(node_a(n));
-    int it = s_expr(node_b(n));
-    if (bt == TY_ERR || it == TY_ERR) return s_set(n, TY_ERR);
-    if (!s_is_ptr(bt) || s_is_void_ptr(bt)) {
-        return s_fail(n, s_q("no se puede indexar ", type_name(bt), ""));
-    }
-    if (!s_is_int(it)) {
-        return s_fail(n, s_q("el indice debe ser entero, no ", type_name(it), ""));
-    }
-    return s_set(n, bt - TYPE_PTR_UNIT);
 }
 
 int s_bad_operands(void *n, int op, int lt, int rt) {
@@ -302,7 +259,7 @@ int s_binop(void *n) {
         }
         return s_bad_operands(n, op, lt, rt);
     }
-    if (op == '*' || op == '/' || op == '%') {
+    if (op == '*' || op == '/') {
         if (!s_is_int(lt) || !s_is_int(rt)) return s_bad_operands(n, op, lt, rt);
         if (op != '*' && node_kind(r) == N_NUM && node_value(r) == 0) {
             s_report(r, "division entre cero");
@@ -331,21 +288,15 @@ int s_expr(void *n) {
     if (k == N_CALL) return s_call(n);
     if (k == N_CAST) return s_cast(n);
     if (k == N_UNOP) return s_unop(n);
-    if (k == N_POSTFIX) return s_postfix(n);
-    if (k == N_INDEX) return s_index(n);
     return s_binop(n);
 }
 
 // ---------- declaraciones ----------
 
-// Constante: literal, o + / - aplicado a una constante
+// Un inicializador global es un literal
 int s_is_const(void *e) {
     int k = node_kind(e);
-    if (k == N_NUM || k == N_CHR || k == N_STR) return 1;
-    if (k == N_UNOP && (node_value(e) == '+' || node_value(e) == '-')) {
-        return s_is_const(node_a(e));
-    }
-    return 0;
+    return k == N_NUM || k == N_CHR || k == N_STR;
 }
 
 // El identificador entra en ámbito después de su inicializador

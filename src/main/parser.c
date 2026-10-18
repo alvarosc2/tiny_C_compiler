@@ -12,10 +12,10 @@ int p_errors;    // errores reportados
 int p_stop;      // 1 al superar el límite de errores
 
 void *p_expression();
-void *p_assignment();
 void *p_unary();
 void *p_statement();
 void *p_block();
+void *p_body();
 
 // ---------- tokens y errores ----------
 
@@ -43,13 +43,11 @@ char *p_token_name(int k) {
     if (k == T_GE) return "'>='";
     if (k == T_AND) return "'&&'";
     if (k == T_OR) return "'||'";
-    if (k == T_INC) return "'++'";
-    if (k == T_DEC) return "'--'";
     char *s = alloc(4);
-    s[0] = '\'';
-    s[1] = k;
-    s[2] = '\'';
-    s[3] = 0;
+    *(s + 0) = '\'';
+    *(s + 1) = k;
+    *(s + 2) = '\'';
+    *(s + 3) = 0;
     return s;
 }
 
@@ -171,7 +169,7 @@ void *p_primary() {
         if (p_kind() != ')') {
             int more = 1;
             while (more) {
-                void *arg = p_assignment();
+                void *arg = p_expression();
                 if (arg == 0) return 0;
                 if (head == 0) head = arg;
                 else node_set_next(tail, arg);
@@ -188,35 +186,9 @@ void *p_primary() {
     return 0;
 }
 
-void *p_postfix(void *e) {
-    int more = 1;
-    while (more) {
-        int k = p_kind();
-        if (k == '[') {
-            void *n = p_node(N_INDEX);
-            p_next();
-            void *idx = p_expression();
-            if (idx == 0) return 0;
-            if (!p_expect(']')) return 0;
-            node_set_a(n, e);
-            node_set_b(n, idx);
-            e = n;
-        } else if (k == T_INC || k == T_DEC) {
-            void *n = p_node(N_POSTFIX);
-            node_set_value(n, k);
-            p_next();
-            node_set_a(n, e);
-            e = n;
-        } else {
-            more = 0;
-        }
-    }
-    return e;
-}
-
 void *p_unary() {
     int k = p_kind();
-    if (k == '+' || k == '-' || k == '!' || k == '*') {
+    if (k == '!' || k == '*') {
         void *n = p_node(N_UNOP);
         node_set_value(n, k);
         p_next();
@@ -240,11 +212,9 @@ void *p_unary() {
         void *inner = p_expression();
         if (inner == 0) return 0;
         if (!p_expect(')')) return 0;
-        return p_postfix(inner);
+        return inner;
     }
-    void *e = p_primary();
-    if (e == 0) return 0;
-    return p_postfix(e);
+    return p_primary();
 }
 
 // Niveles: 0 ||, 1 &&, 2 igualdad, 3 relacional, 4 aditivo, 5 multiplicativo
@@ -254,7 +224,7 @@ int p_level_op(int level, int k) {
     if (level == 2) return k == T_EQ || k == T_NE;
     if (level == 3) return k == '<' || k == '>' || k == T_LE || k == T_GE;
     if (level == 4) return k == '+' || k == '-';
-    return k == '*' || k == '/' || k == '%';
+    return k == '*' || k == '/';
 }
 
 void *p_binary(int level) {
@@ -273,29 +243,13 @@ void *p_binary(int level) {
     return left;
 }
 
-int p_is_lvalue(void *n) {
-    int k = node_kind(n);
-    if (k == N_ID || k == N_INDEX) return 1;
-    return k == N_UNOP && node_value(n) == '*';
-}
-
-void *p_assignment() {
-    void *left = p_binary(0);
-    if (left == 0) return 0;
-    if (p_kind() != '=') return left;
-    void *n = p_node(N_BINOP);
-    node_set_value(n, '=');
-    if (!p_is_lvalue(left)) p_error("el lado izquierdo de '=' no es asignable");
-    p_next();
-    void *right = p_assignment();
-    if (right == 0) return 0;
-    node_set_a(n, left);
-    node_set_b(n, right);
-    return n;
-}
-
 void *p_expression() {
-    return p_assignment();
+    return p_binary(0);
+}
+
+int p_is_lvalue(void *n) {
+    if (node_kind(n) == N_ID) return 1;
+    return node_kind(n) == N_UNOP && node_value(n) == '*';
 }
 
 // ---------- declaraciones y sentencias ----------
@@ -361,64 +315,92 @@ void *p_block() {
     return b;
 }
 
-void *p_statement() {
-    int k = p_kind();
-    if (p_is_type(k)) return p_local_decl();
-    if (k == '{') return p_block();
-    if (k == T_RETURN) {
-        void *r = p_node(N_RETURN);
+// expression ("=" expression)? ";"  (la asignacion solo existe como sentencia)
+void *p_expr_stmt() {
+    void *n = p_node(N_EXPR_STMT);
+    void *e = p_expression();
+    if (e == 0) return 0;
+    if (p_kind() == '=') {
+        void *as = p_node(N_BINOP);
+        node_set_value(as, '=');
+        if (!p_is_lvalue(e)) p_error("el lado izquierdo de '=' no es asignable");
         p_next();
-        if (p_kind() != ';') {
-            void *e = p_expression();
-            if (e == 0) return 0;
-            node_set_a(r, e);
-        }
-        if (!p_expect(';')) return 0;
-        return r;
+        void *right = p_expression();
+        if (right == 0) return 0;
+        node_set_a(as, e);
+        node_set_b(as, right);
+        e = as;
     }
+    if (!p_expect(';')) return 0;
+    node_set_a(n, e);
+    return n;
+}
+
+void *p_return() {
+    void *r = p_node(N_RETURN);
+    p_next();
+    if (p_kind() != ';') {
+        void *e = p_expression();
+        if (e == 0) return 0;
+        node_set_a(r, e);
+    }
+    if (!p_expect(';')) return 0;
+    return r;
+}
+
+// "(" expression ")" body
+void *p_condition(void *n) {
+    p_next();
+    if (!p_expect('(')) return 0;
+    void *cond = p_expression();
+    if (cond == 0) return 0;
+    if (!p_expect(')')) return 0;
+    node_set_a(n, cond);
+    return n;
+}
+
+// Todo lo que puede ser cuerpo de if/while: sin declaraciones
+void *p_simple() {
+    int k = p_kind();
+    if (k == T_RETURN) return p_return();
     if (k == T_IF) {
-        void *n = p_node(N_IF);
-        p_next();
-        if (!p_expect('(')) return 0;
-        void *cond = p_expression();
-        if (cond == 0) return 0;
-        if (!p_expect(')')) return 0;
-        void *then_s = p_statement();
+        void *n = p_condition(p_node(N_IF));
+        if (n == 0) return 0;
+        void *then_s = p_body();
         if (then_s == 0) return 0;
-        node_set_a(n, cond);
         node_set_b(n, then_s);
         if (p_kind() == T_ELSE) {
             p_next();
-            void *else_s = p_statement();
+            void *else_s = p_body();
             if (else_s == 0) return 0;
             node_set_c(n, else_s);
         }
         return n;
     }
     if (k == T_WHILE) {
-        void *n = p_node(N_WHILE);
-        p_next();
-        if (!p_expect('(')) return 0;
-        void *cond = p_expression();
-        if (cond == 0) return 0;
-        if (!p_expect(')')) return 0;
-        void *body = p_statement();
+        void *n = p_condition(p_node(N_WHILE));
+        if (n == 0) return 0;
+        void *body = p_body();
         if (body == 0) return 0;
-        node_set_a(n, cond);
         node_set_b(n, body);
         return n;
     }
-    void *n = p_node(N_EXPR_STMT);
-    void *e = p_expression();
-    if (e == 0) return 0;
-    if (!p_expect(';')) return 0;
-    node_set_a(n, e);
-    return n;
+    return p_expr_stmt();
+}
+
+void *p_body() {
+    if (p_kind() == '{') return p_block();
+    return p_simple();
+}
+
+void *p_statement() {
+    if (p_is_type(p_kind())) return p_local_decl();
+    return p_simple();
 }
 
 // ---------- funciones y programa ----------
 
-// Parámetros, ya consumido '('. Termina antes de ')'. "void" solo = sin parámetros
+// Parámetros, ya consumido '('. Termina antes de ')'
 void *p_params() {
     void *head = 0;
     void *tail = 0;
@@ -431,7 +413,6 @@ void *p_params() {
         void *prm = p_node(N_PARAM);
         int base = p_kind();
         p_next();
-        if (base == T_VOID && head == 0 && p_kind() == ')') return 0;
         node_set_type(prm, p_stars(base));
         if (head == 0) head = prm;
         else node_set_next(tail, prm);

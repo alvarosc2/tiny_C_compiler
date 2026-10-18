@@ -33,13 +33,13 @@ static inline char *unwrap(char *s, const char *prefix, const char *suffix) {
 
 static inline char *stmt_sexpr(char *stmts) {
     char src[1024];
-    snprintf(src, sizeof(src), "void f(void) { %s }", stmts);
+    snprintf(src, sizeof(src), "void f() { %s }", stmts);
     return unwrap(sexpr(src), "(Program (Func void f (Block ", ")))");
 }
 
 static inline char *expr_sexpr(char *expr) {
     char src[1024];
-    snprintf(src, sizeof(src), "void f(void) { %s; }", expr);
+    snprintf(src, sizeof(src), "void f() { %s; }", expr);
     return unwrap(sexpr(src), "(Program (Func void f (Block (ExprStmt ", "))))");
 }
 

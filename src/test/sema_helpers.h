@@ -22,12 +22,12 @@ static inline int check(char *src) {
 
 #define PRELUDE \
     "int i; char c; char *s; int *ip; void *vp; int **pp; " \
-    "int fi(int a); void fv(void); char *fs(char *p, int n);\n"
+    "int fi(int a); void fv(); char *fs(char *p, int n);\n"
 
 /* Tipo de una expresion dentro de un contexto con PRELUDE */
 static inline char *type_of(char *expr) {
     static char src[2048];
-    snprintf(src, sizeof(src), PRELUDE "void f(void) { %s; }", expr);
+    snprintf(src, sizeof(src), PRELUDE "void f() { %s; }", expr);
     error_quiet(1);
     void *program = parse(src);
     cr_assert_eq(parse_error_count(), 0);
@@ -42,7 +42,7 @@ static inline char *type_of(char *expr) {
 /* Analiza una sentencia con PRELUDE; los errores quedan en error_log() */
 static inline int check_stmt(char *stmt) {
     char src[2048];
-    snprintf(src, sizeof(src), PRELUDE "void f(void) { %s }", stmt);
+    snprintf(src, sizeof(src), PRELUDE "void f() { %s }", stmt);
     return check(src);
 }
 

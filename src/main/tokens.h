@@ -22,10 +22,8 @@
 #define T_GE     270
 #define T_AND    271
 #define T_OR     272
-#define T_INC    273
-#define T_DEC    274
-#define T_CHRLIT 275
-#define T_ERROR  276
+#define T_CHRLIT 273
+#define T_ERROR  274
 
 /* Layout del token (LP64): kind@0, line@4, text@8, value@16, col@20 */
 #define TOKEN_SIZE       24

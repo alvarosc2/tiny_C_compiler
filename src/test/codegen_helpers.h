@@ -35,18 +35,18 @@ static inline int run_c(const char *src, char *out, size_t out_size) {
     return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 }
 
-/* Codigo de salida de 'int main(void) { body }' */
+/* Codigo de salida de 'int main() { body }' */
 static inline int exit_of(const char *body) {
     char src[4096], out[4096];
-    snprintf(src, sizeof(src), "int main(void) {\n%s\n}\n", body);
+    snprintf(src, sizeof(src), "int main() {\n%s\n}\n", body);
     return run_c(src, out, sizeof(out));
 }
 
-/* Salida estandar de un programa con #include "rt.h" y 'int main(void) { body }' */
+/* Salida estandar de un programa con #include "rt.h" y 'int main() { body }' */
 static inline const char *output_of(const char *prelude, const char *body) {
     static char out[8192];
     char src[8192];
-    snprintf(src, sizeof(src), "#include \"rt.h\"\n%s\nint main(void) {\n%s\nreturn 0;\n}\n",
+    snprintf(src, sizeof(src), "#include \"rt.h\"\n%s\nint main() {\n%s\nreturn 0;\n}\n",
              prelude, body);
     int rc = run_c(src, out, sizeof(out));
     cr_assert_eq(rc, 0, "salida inesperada %d", rc);
