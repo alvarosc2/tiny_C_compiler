@@ -406,3 +406,143 @@ make install STAGE=build/fromseed/stage
 ```
 
 Dependencias en tiempo de ejecución: `cpp`, `nasm` y `ld`.
+
+## Apéndice A. Formatos exactos
+
+Las pruebas comparan texto literal, así que estos formatos son parte del contrato. Todo el texto de mensajes va **sin acentos** y en español.
+
+### A.1 Mensajes de error
+
+Formato: `archivo:línea:columna: error: mensaje` más salto de línea, en `stderr` y acumulado en `error_log()`. El nombre por defecto es `<entrada>` (`set_source_name` lo cambia). Línea y columna empiezan en 1; un tab cuenta como una columna; `\r\n` cuenta como un solo salto.
+
+**Léxicos** (los reporta el parser, una sola vez, en la posición del token inválido):
+
+| Mensaje | Caso |
+|---------|------|
+| `numero demasiado grande` | literal que no cabe en `int` de 32 bits con signo (máx. 2147483647) |
+| `cadena sin cerrar` | falta la `"` final, o termina en `\` |
+| `caracter sin cerrar` | falta la `'` final |
+
+Un carácter desconocido (`@`) no es un error léxico: llega como token y el parser dice `se esperaba ... y se encontro '@'`.
+
+**Sintácticos:**
+
+| Mensaje | Notas |
+|---------|-------|
+| `se esperaba X y se encontro Y` | `X` es la descripción de lo esperado (`';'`, `')'`, `'{'`, `un tipo`, `un identificador`, `'}'`, `'{' o ';'`) |
+| `se esperaba una expresion y se encontro Y` | |
+| `se esperaba una declaracion o funcion y se encontro Y` | a nivel de programa |
+| `el lado izquierdo de '=' no es asignable` | solo `N_ID` y `*e` son l-values |
+| `demasiados errores` | tras el error número 20 el análisis se detiene |
+
+`Y` (lo encontrado) se escribe así: `fin de archivo`, `identificador 'nombre'`, `numero`, `cadena`, `caracter`, las palabras clave y operadores de varios caracteres entre comillas simples (`'int'`, `'else'`, `'<='`, `'&&'`), y cualquier otro carácter también entre comillas simples (`';'`, `'@'`). Solo se informa un error por posición de token.
+
+**Semánticos** (`T` es un nombre de tipo de A.4; los nombres van entre comillas simples):
+
+| Mensaje | Posición |
+|---------|----------|
+| `identificador 'x' no declarado` | el identificador |
+| `funcion 'f' no declarada` | la llamada |
+| `'x' no es una funcion` | la llamada |
+| `'f' es una funcion, no una variable` | el identificador |
+| `la funcion 'f' espera N argumento(s) y recibe M argumento(s)` | la llamada; singular si N o M valen 1 (`1 argumento`, `0 argumentos`) |
+| `argumento K de 'f': no se puede convertir 'T1' a 'T2'` | el argumento; K desde 1 |
+| `no se puede asignar 'T1' a 'T2'` | el `=` |
+| `operandos invalidos para 'op': 'T1' y 'T2'` | el operador |
+| `operando invalido para '!': 'T'` | el operador |
+| `aritmetica sobre 'void*' no permitida` | el operador |
+| `no se puede desreferenciar 'T'` | el `*` |
+| `division entre cero` | el literal `0` del divisor |
+| `la condicion debe ser escalar, no 'T'` | la condición |
+| `no se puede convertir 'T1' a 'T2'` | un cast inválido |
+| `la variable 'x' no puede ser de tipo void` / `el parametro 'x' no puede ser de tipo void` | la declaración |
+| `'x' ya esta declarado en este ambito` | la declaración |
+| `no se puede inicializar 'T1' con 'T2'` | el inicializador |
+| `el inicializador de 'x' debe ser una constante` | el inicializador (global) |
+| `declaracion de 'f' en conflicto con la anterior` | la función |
+| `la funcion 'f' ya esta definida` | la función |
+| `la funcion 'f' no puede tener mas de 6 parametros` | la función |
+| `una funcion void no puede retornar un valor` | el `return` |
+| `se esperaba un valor de retorno de tipo 'T'` | el `return` |
+| `no se puede retornar 'T1' en una funcion que retorna 'T2'` | la expresión devuelta |
+
+Posición de un nodo: la de su primer carácter, salvo `N_BINOP` (el operador) y `N_FUNC` (el tipo de retorno). `N_BLOCK` es la `{`; `N_EXPR_STMT` el inicio de la expresión; `N_CALL` el nombre; `N_CAST` el `(`; `N_UNOP` el operador.
+
+### A.2 Volcado de tokens (`--tokens`)
+
+Una línea por token: `L:C: <Categoría> detalle`. La última es `<Fin>`.
+
+| Categoría | Detalle |
+|-----------|---------|
+| `Identificador` | ` nombre` |
+| `Numero` | ` valor` |
+| `Cadena` | ` "texto"` (ya con escapes decodificados, sin volver a escapar) |
+| `Caracter` | ` 'c' (código)` si el código está entre 32 y 126; si no ` (código)` |
+| `PalabraClave`, `Operador` | ` texto` (`while`, `<=`, `+`) |
+| `Error` | ` mensaje` |
+| `Fin` | nada |
+| `Desconocido` | un carácter que no es operador: ` c` |
+
+`%`, `[` y `]` se clasifican como `Operador`. Ejemplo: `1:15: <Operador> <=`.
+
+### A.3 Volcado del AST
+
+**Etiquetas** (comunes a `--ast`, `--types` y la S-expresión):
+
+| Nodo | Etiqueta |
+|------|----------|
+| `N_PROGRAM` | `Program` |
+| `N_FUNC` | `Func T nombre` (con cuerpo) o `Proto T nombre` (prototipo) |
+| `N_PARAM` / `N_DECL` | `Param T nombre` / `Decl T nombre` |
+| `N_BLOCK`, `N_IF`, `N_WHILE`, `N_RETURN`, `N_EXPR_STMT` | `Block`, `If`, `While`, `Return`, `ExprStmt` |
+| `N_BINOP` / `N_UNOP` | `Binop op` / `Unop op` |
+| `N_CAST` | `Cast T` |
+| `N_CALL` | `Call nombre` |
+| `N_ID` | `Id nombre` |
+| `N_STR` | `Str "texto"` (texto ya decodificado, sin reescapar) |
+| `N_NUM` / `N_CHR` | `Num valor` / `Chr código` |
+
+En la etiqueta, `T` se escribe como la base (`int`, `char`, `void`) seguida de un `*` por nivel de puntero, **sin espacio** (`char*`, `int**`).
+
+**S-expresión** (`ast_sexpr`, la que usan las pruebas): `(Etiqueta hijo hijo ...)`, con un espacio antes de cada hijo y ninguno tras el nombre si no hay hijos. Los hijos se recorren en el orden de las ranuras `a`, `b`, `c` y, dentro de cada ranura, por la lista `next`. Ejemplos:
+
+```Text
+(Program (Func void f (Block (ExprStmt (Binop = (Id a) (Num 1))))))
+(If (Id a) (ExprStmt (Id b)) (ExprStmt (Id c)))
+(Decl int x (Binop + (Num 1) (Num 2)))
+(Call f (Num 1) (Binop + (Id x) (Num 2)))
+(Cast char* (Id p))
+```
+
+**Volcado con sangría** (`--ast`): una línea por nodo, dos espacios por nivel de profundidad, `etiqueta` + **dos espacios** + `(L:C)`:
+
+```Text
+Program  (1:1)
+  Decl int g  (1:1)
+    Num 1  (1:9)
+  Func int f  (3:1)
+    Param int a  (3:7)
+    Block  (3:14)
+```
+
+**Con tipos** (`--types`, tras el análisis): igual, pero toda expresión, excepto `Cast`, añade ` : T` a la etiqueta (`Binop <= : int  (4:9)`). Las sentencias y declaraciones no llevan tipo.
+
+### A.4 Nombres de tipo
+
+`type_name(t)`: `int`, `char`, `void`, seguidos de un `*` por puntero (`char*`, `void**`); el tipo de error es `<error>`. Codificación numérica: base (`T_INT`=260, `T_CHAR`=261, `T_VOID`=262) + 1000 por nivel de puntero; `TY_ERR` = -1.
+
+### A.5 Línea de comandos de `tcc`
+
+`tcc [--check | --tokens | --ast | --types | --asm] archivo.c` (sin opción es `--check`). Códigos de salida: `0` sin errores, `1` errores de sintaxis o semánticos (o archivo ilegible), `2` uso incorrecto (sin archivo, sobran argumentos u opción desconocida). La salida normal va a `stdout` y los errores a `stderr`. `--tokens` no analiza la sintaxis; `--ast` no ejecuta el análisis semántico; `--asm` y `--types` lo ejecutan antes. El tcc auto-alojado (stage1/2) solo ofrece `--check` y `--asm`, y sin argumentos sale con `2`.
+
+### A.6 Forma del ensamblador generado
+
+Primera línea: `; generado por tcc: NASM, sintaxis Intel, x86-64 Linux`. Luego `section .text`; cada función con el comentario `; T nombre`, `global _nombre` y `_nombre:`, y al final `section .data` (globales) y `section .rodata` (cadenas, etiquetas `S<n>`). Las etiquetas de control son `L<n>`. Los detalles de registros, pila y convenciones están en la sección 11.3. Las pruebas no comparan el texto del ensamblador sino el **comportamiento** del ejecutable, con una excepción: el auto-alojamiento exige que el ensamblador de dos etapas sea **idéntico byte a byte**, así que el generador debe ser determinista (sin direcciones, fechas ni orden de tablas hash).
+
+### A.7 Reglas de recuperación de errores
+
+- El parser reporta como máximo un error por token y sigue analizando; para en 20 errores (`demasiados errores`).
+- Sincronización: dentro de un bloque, avanza hasta después de `;` o hasta antes de `}`; a nivel de programa, hasta una palabra clave de tipo.
+- Un error de sintaxis impide ejecutar el análisis semántico.
+- Un error de tipo produce el tipo `<error>`, que silencia los errores derivados (sin cascada).
+- Tras un error semántico no se genera código.
