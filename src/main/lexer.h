@@ -7,6 +7,8 @@ void lexer_init(char *source);
 int token_kind(void *t);
 char *token_text(void *t);
 int token_value(void *t);
+int token_line(void *t);
+int token_col(void *t);
 
 int next_char();
 int advance();

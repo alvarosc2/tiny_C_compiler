@@ -10,7 +10,7 @@ OBJ_MAIN := $(patsubst src/main/%.c,$(BUILD)/main/%.o,$(SRC_MAIN))
 OBJ_LIB  := $(filter-out $(BUILD)/main/main.o,$(OBJ_MAIN))
 TEST_BIN := $(BUILD)/run_tests
 
-.PHONY: all build test run sanitize memcheck format clean help
+.PHONY: all build test run lex sanitize memcheck format clean help
 
 all: build
 
@@ -33,7 +33,11 @@ test: $(TEST_BIN)
 	./$(TEST_BIN)
 
 run: build
-	./$(TARGET)
+	./$(TARGET) $(FILE)
+
+# Muestra la clasificación del lexer: make lex FILE=examples/sample.c
+lex: build
+	./$(TARGET) $(or $(FILE),examples/sample.c)
 
 # Tests con AddressSanitizer + UBSan (recompila desde cero)
 sanitize:
@@ -53,7 +57,8 @@ clean:
 help:
 	@echo "build     compila el compilador ($(TARGET))"
 	@echo "test      compila y corre las pruebas Criterion"
-	@echo "run       compila y ejecuta"
+	@echo "run       ejecuta: make run FILE=archivo.c"
+	@echo "lex       muestra los tokens (default examples/sample.c)"
 	@echo "sanitize  tests con ASan/UBSan"
 	@echo "memcheck  tests bajo valgrind"
 	@echo "format    clang-format"

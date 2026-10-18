@@ -26,9 +26,11 @@
 #define T_DEC    274
 #define T_CHRLIT 275
 
-/* Layout del token (LP64): kind@0, text@8, value@16 */
+/* Layout del token (LP64): kind@0, line@4, text@8, value@16, col@20 */
 #define TOKEN_SIZE       24
+#define TOKEN_LINE_OFF   4
 #define TOKEN_TEXT_OFF   8
 #define TOKEN_VALUE_OFF  16
+#define TOKEN_COL_OFF    20
 
 #endif

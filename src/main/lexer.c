@@ -3,6 +3,10 @@
 
 char *src;      // código fuente
 int pos;        // posición actual
+int line;       // línea actual (desde 1)
+int col;        // columna actual (desde 1)
+int tok_line;   // línea donde empieza el token en curso
+int tok_col;    // columna donde empieza el token en curso
 
 int is_alpha(int c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
@@ -15,6 +19,10 @@ int is_digit(int c) {
 void lexer_init(char *source) {
     src = source;
     pos = 0;
+    line = 1;
+    col = 1;
+    tok_line = 1;
+    tok_col = 1;
 }
 
 int next_char() {
@@ -22,7 +30,14 @@ int next_char() {
 }
 
 int advance() {
-    return src[pos++];
+    int c = src[pos++];
+    if (c == '\n') {
+        line = line + 1;
+        col = 1;
+    } else {
+        col = col + 1;
+    }
+    return c;
 }
 
 void skip_spaces() {
@@ -84,6 +99,8 @@ int read_char_literal() {
 void *make_token(int kind, char *text, int value) {
     char *p = alloc(TOKEN_SIZE);
     *(int *)(p + 0) = kind;
+    *(int *)(p + TOKEN_LINE_OFF) = tok_line;
+    *(int *)(p + TOKEN_COL_OFF) = tok_col;
     *(char **)(p + TOKEN_TEXT_OFF) = text;
     *(int *)(p + TOKEN_VALUE_OFF) = value;
     return p;
@@ -92,6 +109,8 @@ void *make_token(int kind, char *text, int value) {
 int token_kind(void *t) { return *(int *)((char *)t + 0); }
 char *token_text(void *t) { return *(char **)((char *)t + TOKEN_TEXT_OFF); }
 int token_value(void *t) { return *(int *)((char *)t + TOKEN_VALUE_OFF); }
+int token_line(void *t) { return *(int *)((char *)t + TOKEN_LINE_OFF); }
+int token_col(void *t) { return *(int *)((char *)t + TOKEN_COL_OFF); }
 
 int keyword_kind(char *id) {
     if (str_eq(id, "int")) return T_INT;
@@ -106,6 +125,8 @@ int keyword_kind(char *id) {
 
 void *next_token() {
     skip_spaces();
+    tok_line = line;
+    tok_col = col;
 
     int c = next_char();
     if (c == 0) return make_token(T_EOF, 0, 0);
